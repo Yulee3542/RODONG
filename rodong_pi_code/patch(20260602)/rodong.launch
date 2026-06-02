@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- ── 디바이스 노드 ─────────────────────────────────────── -->
+  <include file="/home/pi/xycar_ws/src/xycar_device/xycar_ultrasonic_1x8/launch/xycar_ultrasonic.launch"/>
+  <include file="/home/pi/xycar_ws/src/xycar_device/xycar_imu/launch/xycar_imu.launch"/>
+
+  <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="screen">
+    <param name="video_device"  value="/dev/video0"/>
+    <param name="image_width"   value="640"/>
+    <param name="image_height"  value="480"/>
+    <param name="pixel_format"  value="yuyv"/>
+    <param name="camera_frame_id" value="usb_cam"/>
+    <param name="io_method"     value="mmap"/>
+  </node>
+
+  <!-- ── 애플리케이션 노드 ─────────────────────────────────── -->
+  <node name="aruco_detector" pkg="rodong" type="aruco_detector.py"  output="screen"/>
+  <node name="vfh_planner"    pkg="rodong" type="vfh_planner.py"     output="screen"/>
+  <node name="yolo_node"      pkg="rodong" type="yolo_node.py"        output="screen"/>
+
+  <!-- 바닥 검은 경계선 검출 → /rodong/boundary (경계 밖 이탈 방지) -->
+  <node name="line_detector"  pkg="rodong" type="line_detector.py"    output="screen">
+    <param name="black_v_max" value="60"/>     <!-- V<=이 값 → 검정 (밝으면↑/그림자 많으면↓) -->
+    <param name="black_s_max" value="255"/>    <!-- S 상한 (기본 무시) -->
+    <param name="roi_top"     value="0.55"/>   <!-- 바닥만 보도록 ROI 시작 높이비 -->
+    <param name="near_top"    value="0.85"/>   <!-- near 띠 시작 높이비 -->
+    <param name="min_ratio"   value="0.04"/>   <!-- 노이즈 컷 -->
+    <param name="debug"       value="false"/>  <!-- true: /rodong/boundary_debug 영상 -->
+  </node>
+
+  <include file="/home/pi/xycar_ws/src/xycar_device/xycar_motor/launch/xycar_motor.launch"/>
+
+  <!-- 메인 (IDLE 상태로 시작 — teleop의 INIT 명령 대기) -->
+  <node name="rodong_main"    pkg="rodong" type="rodong_main.py"      output="screen"/>
+
+  <!-- ── 텔레옵 (별도 터미널에서 실행 권장, 여기서는 선택적) ─ -->
+  <!--
+    launch에 포함하면 한 터미널에서 키 입력이 묻혀 동작 안 됨.
+    별도 터미널에서 실행:
+      rosrun rodong rodong_teleop.py
+  -->
+
+</launch>

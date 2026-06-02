@@ -57,6 +57,12 @@ W_SMOOTH  = 0.2   # 직전 선택 방향 유지 (떨림 방지)
 # ── 타임아웃 [sec] ───────────────────────────────────────────────
 GOAL_TIMEOUT = 1.5
 YOLO_TIMEOUT = 1.0
+BOUND_TIMEOUT = 0.7     # /rodong/boundary (바닥 경계선) 유효 시간
+
+# ── 바닥 검은 경계선 (line_detector) ─────────────────────────────
+# 검은픽셀 비율이 임계 이상인 구역에 가상 장애물을 추가 → 경계 안쪽으로 조향.
+BOUND_TH      = 0.10    # 좌/중/우 구역 임계 (이상이면 그쪽 막힘)
+BOUND_NEAR_TH = 0.15    # near(차 바로 앞) 임계 (이상이면 정면 강하게 차단)
 
 # ── 초음파 빔 각도 [deg] (메모리 매핑) ───────────────────────────
 # idx0=좌(-90) 1=좌전(-45) 2=우전(+45) 3=전(0)
@@ -92,6 +98,10 @@ class VFHPlanner:
         self.yolo_bottom = 0.0
         self.last_yolo_t = None
 
+        # 바닥 경계선 [left, center, right, near] 검은픽셀 비율
+        self.bound        = [0.0, 0.0, 0.0, 0.0]
+        self.last_bound_t = None
+
         self.prev_steer = 0.0       # 직전 선택 조향각 [deg] (smooth용)
 
         self.pub = rospy.Publisher('/rodong/vfh_cmd', xycar_motor, queue_size=1)
@@ -102,6 +112,8 @@ class VFHPlanner:
                          self.cb_goal, queue_size=1)
         rospy.Subscriber('/rodong/yolo', Float32MultiArray,
                          self.cb_yolo, queue_size=1)
+        rospy.Subscriber('/rodong/boundary', Float32MultiArray,
+                         self.cb_boundary, queue_size=1)
 
         rospy.loginfo("[VFH+] sensor-fusion planner started (threshold=%.0fcm)",
                       THRESHOLD)
@@ -123,6 +135,12 @@ class VFHPlanner:
             self.yolo_cx     = d[2]
             self.yolo_bottom = d[4]
             self.last_yolo_t = rospy.Time.now()
+
+    def cb_boundary(self, msg):
+        d = list(msg.data)
+        if len(d) >= 4:
+            self.bound        = d[:4]
+            self.last_bound_t = rospy.Time.now()
 
     # ── 유효성 체크 ──────────────────────────────────────────────
     def _valid(self, t, timeout):
@@ -187,6 +205,22 @@ class VFHPlanner:
             hist[6] += 1.0; hist[5] += 1.0; hist[4] += 0.7
         elif avoid_dir == 'center':
             hist[2] += 0.8; hist[3] += 1.0; hist[4] += 0.8
+
+        # ── 바닥 검은 경계선 → 가상 장애물 (경계 밖 이탈 방지) ────
+        # 경계가 보이는 쪽 섹터를 막아 반대(안쪽)로 조향하게 만든다.
+        if self._valid(self.last_bound_t, BOUND_TIMEOUT):
+            bl, bc, br, bn = self.bound
+            if bl > BOUND_TH:                  # 좌측 경계 → 좌측 차단 → 우조향 유도
+                hist[0] += 1.5; hist[1] += 1.2; hist[2] += 0.6
+            if br > BOUND_TH:                  # 우측 경계 → 우측 차단 → 좌조향 유도
+                hist[6] += 1.5; hist[5] += 1.2; hist[4] += 0.6
+            if bc > BOUND_TH:                  # 정면 경계
+                hist[2] += 0.8; hist[3] += 1.2; hist[4] += 0.8
+            if bn > BOUND_NEAR_TH:             # 차 바로 앞 경계 임박 → 정면 강하게 차단
+                hist[2] += 1.5; hist[3] += 2.0; hist[4] += 1.5
+            rospy.loginfo_throttle(2.0,
+                "[VFH+] boundary L=%.2f C=%.2f R=%.2f near=%.2f",
+                bl, bc, br, bn)
 
         # ── 2. 목표 섹터 결정 ────────────────────────────────────
         if goal_valid:
