@@ -80,7 +80,9 @@ class ArucoDetector:
             # position.x = 거리[m], position.y = 수평 오프셋[m]
             ps.pose.position.x = distance
             ps.pose.position.y = distance * np.tan(bearing)
-            ps.pose.position.z = 0.0
+            # position.z = 마커 픽셀폭(px). rodong_main 이 ArUco 를 재검출하지 않고
+            # 접근 완료(MARKER_CLOSE_PX) 판정에 쓰도록 함께 발행.
+            ps.pose.position.z = float(pixel_w)
 
             # orientation.z = bearing [rad] (yaw 대용)
             ps.pose.orientation.z = bearing

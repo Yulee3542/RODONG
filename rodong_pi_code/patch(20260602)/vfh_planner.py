@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-vfh_planner.py  (RODONG12 - 센서 융합 능동 회피)
+vfh_planner.py  (RODONG13 - 센서 융합 능동 회피)
 ================================================================
-역할: RODONG 회피 두뇌. 초음파 + ArUco goal + YOLO 판단을 융합해
+역할: RODONG 회피 두뇌. 초음파 + ArUco goal + YOLO + 바닥경계 판단을 융합해
       VFH+ 알고리즘으로 (speed, angle)을 계산하여 /rodong/vfh_cmd 발행.
 
 구독:
@@ -11,74 +11,34 @@ vfh_planner.py  (RODONG12 - 센서 융합 능동 회피)
   /aruco_pose        (geometry_msgs/PoseStamped)      - VFH+ goal
   /rodong/yolo       (std_msgs/Float32MultiArray)     - 카메라 판단 (선택)
                       data = [class_id, conf, cx_norm, cy_norm, bottom_y_ratio]
-                      class_id: 0=CLIMB 1=AVOID 2=IGNORE -1=없음
+  /rodong/boundary   (std_msgs/Float32MultiArray)     - 바닥 경계선 (선택)
+                      data = [left, center, right, near]
 
 발행:
   /rodong/vfh_cmd    (xycar_msgs/xycar_motor)
 
 설계 노트:
-  - rodong_main.py 는 이 토픽을 구독해서 BUG_DRIVE 상태일 때만 /xycar_motor 로 전달.
+  - 상수/초음파빔/히스토그램 로직은 rodong_config / rodong_sonar 로 분리(단일 출처).
+  - rodong_main.py 는 이 토픽을 구독해 BUG_DRIVE 상태일 때만 /xycar_motor 로 전달.
   - goal(ArUco) 가 보이면 그 방향을 선호, 없으면 직진(섹터3)을 목표로 회피 주행.
-  - YOLO 가 AVOID 를 보고하면 해당 방향 섹터에 가상 장애물을 추가(능동 회피).
-  - YOLO 가 CLIMB 를 보고하면 정면 장애물을 무시(넘어갈 대상)하고 직진 유지.
+  - YOLO AVOID / 바닥경계 는 해당 방향 섹터에 가상 장애물을 추가(능동 회피).
 """
 
+import os
+import sys
+import math
 import rospy
-import numpy as np
 from std_msgs.msg import Int32MultiArray, Float32MultiArray
 from geometry_msgs.msg import PoseStamped
 from xycar_msgs.msg import xycar_motor
 
-# ── VFH 히스토그램 파라미터 ──────────────────────────────────────
-# 전방 ±90도만 다루는 7섹터 (각 30도). 후방 빔은 회피 계산에서 제외.
-#   섹터:  0     1     2    3   4    5    6
-#   각도: -90   -60   -30   0  +30  +60  +90
-N_SECTORS  = 7
-SECTOR_DEG = 30.0
-SECTOR_ANGLE = [-90, -90, -90, 0, 90, 90, 90]   # 섹터 중심각 → 조향각
+# catkin 은 devel/lib 래퍼에서 노드를 실행하므로 scripts/ 가 sys.path 에 없음.
+# 동일 폴더의 공용 모듈(rodong_config 등)을 import 하도록 경로 추가.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# ── 거리/임계값 [cm] ─────────────────────────────────────────────
-THRESHOLD      = 40.0   # 이 거리 이하 → 장애물로 간주 (실주행 기본값)
-THRESHOLD_DESK = 5.0    # 책상 테스트용 (필요시 THRESHOLD 교체)
-SLOW_DIST      = 50.0   # 이 거리 이하 → 감속
-EMERGENCY      = 12.0   # 이 거리 이하(정면) → 후진/정지 신호
-
-# ── 모터 파라미터 ────────────────────────────────────────────────
-SPEED_NORMAL = 25
-SPEED_SLOW   = 25
-SPEED_BACK   = -25      # 전방향 막힘 시 후진
-ANGLE_MAX    = 90       # 조향 최대 (실측: ±90 정상)
-
-# ── VFH 비용 가중치 ──────────────────────────────────────────────
-W_GOAL    = 1.0   # goal 방향에 가까울수록 선호
-W_HEADING = 0.4   # 현재 진행방향 유지 (지그재그 방지)
-W_SMOOTH  = 0.2   # 직전 선택 방향 유지 (떨림 방지)
-
-# ── 타임아웃 [sec] ───────────────────────────────────────────────
-GOAL_TIMEOUT = 1.5
-YOLO_TIMEOUT = 1.0
-BOUND_TIMEOUT = 0.7     # /rodong/boundary (바닥 경계선) 유효 시간
-
-# ── 바닥 검은 경계선 (line_detector) ─────────────────────────────
-# 검은픽셀 비율이 임계 이상인 구역에 가상 장애물을 추가 → 경계 안쪽으로 조향.
-BOUND_TH      = 0.10    # 좌/중/우 구역 임계 (이상이면 그쪽 막힘)
-BOUND_NEAR_TH = 0.15    # near(차 바로 앞) 임계 (이상이면 정면 강하게 차단)
-
-# ── 초음파 빔 각도 [deg] (메모리 매핑) ───────────────────────────
-# idx0=좌(-90) 1=좌전(-45) 2=우전(+45) 3=전(0)
-# idx4=우(+90) 5=우후(+135) 6=후(180) 7=좌후(-135)
-BEAM_ANGLES = [-90, -45, 45, 0, 90, 135, 180, -135]
-
-# ── YOLO 클래스 ──────────────────────────────────────────────────
-CLS_CLIMB  = 0
-CLS_AVOID  = 1
-CLS_IGNORE = 2
-CLIMB_BOTTOM_RATIO = 0.82   # 메모리: bottom_y/frame_h >= 0.82 → CLIMB 후보
-
-# ── YOLO 사용 정책 ───────────────────────────────────────────────
-# 현재 모델 mAP50=0.30 으로 신뢰도 낮음. CLIMB 판정은 끄고 AVOID 보조만 사용.
-# 모델 성능이 충분해지면 USE_CLIMB=True 로 등반 회피 완화 로직 활성화.
-USE_CLIMB = False
+import rodong_config as cfg
+from rodong_geometry import angle_to_sector, clip
+from rodong_sonar import build_histogram, select_sector, front_min
 
 
 class VFHPlanner:
@@ -116,7 +76,7 @@ class VFHPlanner:
                          self.cb_boundary, queue_size=1)
 
         rospy.loginfo("[VFH+] sensor-fusion planner started (threshold=%.0fcm)",
-                      THRESHOLD)
+                      cfg.THRESHOLD)
         rospy.Timer(rospy.Duration(0.1), self.cb_timer)   # 10Hz
 
     # ── 콜백 ─────────────────────────────────────────────────────
@@ -146,19 +106,10 @@ class VFHPlanner:
     def _valid(self, t, timeout):
         return t is not None and (rospy.Time.now() - t).to_sec() < timeout
 
-    # ── 각도 → 섹터 인덱스 ───────────────────────────────────────
-    @staticmethod
-    def _angle_to_sector(deg):
-        # -90~+90 deg → 0~6. 범위 밖이면 None.
-        if deg < -105 or deg > 105:
-            return None
-        s = int(round((deg + 90) / SECTOR_DEG))
-        return max(0, min(N_SECTORS - 1, s))
-
     # ── 메인 루프 (10Hz) ─────────────────────────────────────────
     def cb_timer(self, event):
-        goal_valid = self._valid(self.last_goal_t, GOAL_TIMEOUT)
-        yolo_valid = self._valid(self.last_yolo_t, YOLO_TIMEOUT)
+        goal_valid = self._valid(self.last_goal_t, cfg.GOAL_TIMEOUT)
+        yolo_valid = self._valid(self.last_yolo_t, cfg.YOLO_TIMEOUT)
 
         # ── YOLO 의도 해석 ───────────────────────────────────────
         # climb_now: 정면 물체를 넘어갈 대상으로 보고 장애물 판정 완화
@@ -166,10 +117,10 @@ class VFHPlanner:
         climb_now = False
         avoid_dir = None   # 'left' / 'right' / 'center'
         if yolo_valid:
-            if (USE_CLIMB and self.yolo_cls == CLS_CLIMB
-                    and self.yolo_bottom >= CLIMB_BOTTOM_RATIO):
+            if (cfg.USE_CLIMB and self.yolo_cls == cfg.CLS_CLIMB
+                    and self.yolo_bottom >= cfg.CLIMB_BOTTOM_RATIO):
                 climb_now = True
-            elif self.yolo_cls == CLS_AVOID:
+            elif self.yolo_cls == cfg.CLS_AVOID:
                 if self.yolo_cx < -0.15:
                     avoid_dir = 'left'
                 elif self.yolo_cx > 0.15:
@@ -177,26 +128,8 @@ class VFHPlanner:
                 else:
                     avoid_dir = 'center'
 
-        # ── 1. Polar Histogram (7섹터) ───────────────────────────
-        hist = np.zeros(N_SECTORS)
-
-        for i, ang in enumerate(BEAM_ANGLES):
-            s = self._angle_to_sector(ang)
-            if s is None:
-                continue                      # 후방 빔 무시
-            dist = self.sonar[i]
-            if dist <= 0:
-                continue
-            if dist < THRESHOLD:
-                # CLIMB 대상이면 정면 장애물 영향 완화
-                if climb_now and abs(ang) <= 45:
-                    continue
-                weight = (THRESHOLD - dist) / THRESHOLD
-                hist[s] += weight
-                if s > 0:
-                    hist[s - 1] += weight * 0.5    # 인접 섹터 번짐
-                if s < N_SECTORS - 1:
-                    hist[s + 1] += weight * 0.5
+        # ── 1. Polar Histogram (초음파 7섹터) ────────────────────
+        hist = build_histogram(self.sonar, climb_now=climb_now)
 
         # ── YOLO AVOID → 가상 장애물 추가 ────────────────────────
         if avoid_dir == 'left':
@@ -208,63 +141,45 @@ class VFHPlanner:
 
         # ── 바닥 검은 경계선 → 가상 장애물 (경계 밖 이탈 방지) ────
         # 경계가 보이는 쪽 섹터를 막아 반대(안쪽)로 조향하게 만든다.
-        if self._valid(self.last_bound_t, BOUND_TIMEOUT):
+        if self._valid(self.last_bound_t, cfg.BOUND_TIMEOUT):
             bl, bc, br, bn = self.bound
-            if bl > BOUND_TH:                  # 좌측 경계 → 좌측 차단 → 우조향 유도
+            if bl > cfg.BOUND_TH:              # 좌측 경계 → 좌측 차단 → 우조향 유도
                 hist[0] += 1.5; hist[1] += 1.2; hist[2] += 0.6
-            if br > BOUND_TH:                  # 우측 경계 → 우측 차단 → 좌조향 유도
+            if br > cfg.BOUND_TH:              # 우측 경계 → 우측 차단 → 좌조향 유도
                 hist[6] += 1.5; hist[5] += 1.2; hist[4] += 0.6
-            if bc > BOUND_TH:                  # 정면 경계
+            if bc > cfg.BOUND_TH:              # 정면 경계
                 hist[2] += 0.8; hist[3] += 1.2; hist[4] += 0.8
-            if bn > BOUND_NEAR_TH:             # 차 바로 앞 경계 임박 → 정면 강하게 차단
+            if bn > cfg.BOUND_NEAR_TH:         # 차 바로 앞 경계 임박 → 정면 강하게 차단
                 hist[2] += 1.5; hist[3] += 2.0; hist[4] += 1.5
             rospy.loginfo_throttle(2.0,
                 "[VFH+] boundary L=%.2f C=%.2f R=%.2f near=%.2f",
                 bl, bc, br, bn)
 
         # ── 2. 목표 섹터 결정 ────────────────────────────────────
-        if goal_valid:
-            goal_deg = np.degrees(self.goal_bearing)
-        else:
-            goal_deg = 0.0    # goal 없으면 직진 목표
-        goal_sector = self._angle_to_sector(goal_deg)
+        goal_deg = math.degrees(self.goal_bearing) if goal_valid else 0.0
+        goal_sector = angle_to_sector(goal_deg)
         if goal_sector is None:
             goal_sector = 3
 
         # ── 3. 후보 섹터 비용 평가 ───────────────────────────────
-        OPEN_THRESH = 0.5     # hist 이하면 통행 가능 섹터로 간주
-        best_sector, best_cost = None, float('inf')
-        for s in range(N_SECTORS):
-            if hist[s] > OPEN_THRESH:
-                continue
-            diff_goal    = abs(s - goal_sector)
-            diff_heading = abs(SECTOR_ANGLE[s] - 0)     # 직진 대비
-            diff_smooth  = abs(SECTOR_ANGLE[s] - self.prev_steer)
-            cost = (W_GOAL * diff_goal +
-                    W_HEADING * (diff_heading / 30.0) +
-                    W_SMOOTH * (diff_smooth / 30.0))
-            if cost < best_cost:
-                best_cost, best_sector = cost, s
+        best_sector = select_sector(hist, goal_sector, self.prev_steer)
 
         # ── 4. 모터 명령 ─────────────────────────────────────────
         if best_sector is None:
             # 전방향 막힘 → 후진
             rospy.logwarn_throttle(1.0, "[VFH+] all blocked → reverse")
             self.prev_steer = 0.0
-            self.publish(SPEED_BACK, 0)
+            self.publish(cfg.SPEED_BACK, 0)
             return
 
-        steer = SECTOR_ANGLE[best_sector]
-        steer = int(np.clip(steer, -ANGLE_MAX, ANGLE_MAX))
+        steer = int(clip(cfg.SECTOR_ANGLE[best_sector], -cfg.ANGLE_MAX, cfg.ANGLE_MAX))
         self.prev_steer = steer
 
         # 속도: 정면 가까우면 감속
-        valid_front = [d for d in (self.sonar[1], self.sonar[2], self.sonar[3])
-                       if d > 0]
-        min_front = min(valid_front) if valid_front else 999
-        speed = SPEED_SLOW if min_front < SLOW_DIST else SPEED_NORMAL
+        min_front = front_min(self.sonar)
+        speed = cfg.SPEED_DRIVE
         if climb_now:
-            speed = SPEED_SLOW    # 등반 대상 접근 시 감속
+            speed = cfg.SPEED_DRIVE    # 등반 대상 접근 시 감속 (현재 동일값)
 
         self.publish(speed, steer)
 
