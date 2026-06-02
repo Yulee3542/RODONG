@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- ── 디바이스 노드 ─────────────────────────────────────── -->
+  <include file="/home/pi/xycar_ws/src/xycar_device/xycar_ultrasonic/launch/xycar_ultrasonic.launch"/>
+
+  <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" output="screen">
+    <param name="video_device"  value="/dev/video0"/>
+    <param name="image_width"   value="640"/>
+    <param name="image_height"  value="480"/>
+    <param name="pixel_format"  value="yuyv"/>
+    <param name="camera_frame_id" value="usb_cam"/>
+    <param name="io_method"     value="mmap"/>
+  </node>
+
+  <!-- ── 애플리케이션 노드 ─────────────────────────────────── -->
+  <node name="aruco_detector" pkg="rodong" type="aruco_detector.py"  output="screen"/>
+  <node name="vfh_planner"    pkg="rodong" type="vfh_planner.py"     output="screen"/>
+  <node name="yolo_node"      pkg="rodong" type="yolo_node.py"        output="screen"/>
+
+  <!-- 메인 (IDLE 상태로 시작 — teleop의 INIT 명령 대기) -->
+  <node name="rodong_main"    pkg="rodong" type="rodong_main.py"      output="screen"/>
+
+  <!-- ── 텔레옵 (별도 터미널에서 실행 권장, 여기서는 선택적) ─ -->
+  <!--
+    launch에 포함하면 한 터미널에서 키 입력이 묻혀 동작 안 됨.
+    별도 터미널에서 실행:
+      rosrun rodong rodong_teleop.py
+  -->
+
+</launch>

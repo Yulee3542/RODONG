@@ -1,0 +1,13 @@
+names:
+- CLIMB
+- AVOID
+nc: 2
+roboflow:
+  license: Public Domain
+  project: stairs-ramps
+  url: https://universe.roboflow.com/vasile-grosu-uslqx/stairs-ramps/dataset/1
+  version: 1
+  workspace: vasile-grosu-uslqx
+test: ../test/images
+train: ../train/images
+val: ../valid/images

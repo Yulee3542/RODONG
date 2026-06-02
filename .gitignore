@@ -1,0 +1,22 @@
+# ── Large artifacts (do NOT commit to GitHub) ─────────────────
+# 5.3 GB raw SD-card dd image of the Xycar Pi
+original files/
+*.img
+*.img.gz
+
+# Python virtual environment (1.9 GB)
+rodong_train_venv/
+venv/
+.venv/
+
+# ── Python caches ─────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyc
+
+# ── Jupyter ───────────────────────────────────────────────────
+.ipynb_checkpoints/
+
+# ── OS / editor ───────────────────────────────────────────────
+.DS_Store
+*.swp
