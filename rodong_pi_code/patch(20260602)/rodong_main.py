@@ -272,6 +272,13 @@ class RodongMain:
             rate.sleep()
 
         self.stop_motor()
+
+        # 후진 중 틀어둔 조향을 정면(0°)으로 펴고 서보가 물리적으로
+        # 중앙에 자리잡을 시간을 준다 — 그래야 다시 전진할 때 바퀴가
+        # 꺾인 채로 출발하지 않는다.
+        self.drive(0, 0)
+        time.sleep(0.4)
+
         self.reversing = False
 
         # 후진으로 틀어진 헤딩을 원래대로 복귀 예약

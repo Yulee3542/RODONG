@@ -1,0 +1,30 @@
+# RODONG ROS1 시뮬 컨테이너.
+#   빌드:  scripts/sim_build.sh   (또는 docker compose -f docker/compose.yaml build)
+#   실행:  scripts/sim_run.sh
+# 레포를 /workspace 로 마운트 → 호스트에서 코드 수정이 컨테이너에 바로 반영.
+services:
+  sim:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: rodong-sim:noetic
+    container_name: rodong-sim
+    # host 네트워킹 → roscore(11311) 를 다른 터미널(docker exec)에서 그대로 접근.
+    network_mode: host
+    ipc: host
+    environment:
+      # 헤드리스 기본 소프트웨어 GL. GPU 통과 시 SOFTWARE_GL=0 로 끄면 됨.
+      - LIBGL_ALWAYS_SOFTWARE=${SOFTWARE_GL:-1}
+      - DISPLAY=${DISPLAY:-:0}
+      - ROS_MASTER_URI=http://localhost:11311
+      - ROS_HOSTNAME=localhost
+    # Intel iGPU 통과(있으면 GUI/렌더 가속, 없어도 무해).
+    devices:
+      - /dev/dri:/dev/dri
+    volumes:
+      - ..:/workspace
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    stdin_open: true
+    tty: true
+    working_dir: /workspace
+    command: bash

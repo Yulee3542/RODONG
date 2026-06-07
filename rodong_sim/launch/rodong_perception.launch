@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<!--
+  rodong_perception.launch — 카메라 + ArUco + YOLO 인지 파이프라인 테스트.
+  실행:
+    scripts/sim_run.sh perception
+  주행 시작:
+    scripts/sim_cmd.sh INIT
+  마커가 보이면 rodong_main 이 BUG_DRIVE → MARKER_APPROACH → (접근 후) UTURN.
+-->
+<launch>
+
+  <arg name="app_dir" default="/workspace/rodong_pi_code/patch(20260602)"/>
+  <arg name="gui"     default="false"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find rodong_sim)/worlds/perception.world"/>
+    <arg name="gui"        value="$(arg gui)"/>
+    <arg name="paused"     value="false"/>
+    <arg name="use_sim_time" value="true"/>
+  </include>
+
+  <param name="robot_description" textfile="$(find rodong_sim)/urdf/rodong_box.urdf"/>
+  <node name="spawn_rodong" pkg="gazebo_ros" type="spawn_model" output="screen"
+        args="-param robot_description -urdf -model rodong -x 0 -y 0 -z 0.10"/>
+
+  <node name="sim_bridge" pkg="rodong_sim" type="sim_bridge.py" output="screen">
+    <param name="speed_to_ms"   value="0.03"/>
+    <param name="wheelbase"     value="0.30"/>
+    <param name="max_steer_deg" value="60.0"/>
+    <param name="max_cm"        value="300"/>
+  </node>
+
+  <!-- 애플리케이션 노드 (patch 원본 단일 소스 실행) -->
+  <node name="vfh_planner"    pkg="rodong_sim" type="run_app.py" output="screen"
+        args="$(arg app_dir) vfh_planner"/>
+  <node name="rodong_main"    pkg="rodong_sim" type="run_app.py" output="screen"
+        args="$(arg app_dir) rodong_main"/>
+  <node name="aruco_detector" pkg="rodong_sim" type="run_app.py" output="screen"
+        args="$(arg app_dir) aruco_detector"/>
+  <node name="yolo_node"      pkg="rodong_sim" type="run_app.py" output="screen"
+        args="$(arg app_dir) yolo_node"/>
+
+</launch>

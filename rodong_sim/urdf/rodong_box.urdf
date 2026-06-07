@@ -1,0 +1,149 @@
+<?xml version="1.0"?>
+<!--
+  rodong_box.urdf — RODONG FSM/회피 로직 검증용 단순 박스 차량.
+  실제 Xycar 모델이 아니라 토픽 인터페이스만 동일하게 맞춘 최소 모델이다.
+    - libgazebo_ros_planar_move : /cmd_vel(Twist) 구독 → 차체를 유니사이클처럼 이동, /odom + tf 발행
+    - 360° ray 라이다       : /scan(LaserScan) 발행 → sim_bridge 가 8빔으로 샘플링해 /xycar_ultrasonic 생성
+    - imu 센서              : /imu/data(sensor_msgs/Imu) 발행 → rodong_main 의 헤딩(yaw) 입력
+  base 박스: 0.30(L) x 0.20(W) x 0.10(H). 라이다는 차체 위(z+0.08)라 자기 차체엔 안 맞는다.
+-->
+<robot name="rodong_box">
+
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="3.0"/>
+      <inertia ixx="0.05" ixy="0" ixz="0" iyy="0.05" iyz="0" izz="0.05"/>
+    </inertial>
+    <collision>
+      <origin xyz="0 0 0"/>
+      <geometry><box size="0.30 0.20 0.10"/></geometry>
+    </collision>
+    <visual>
+      <origin xyz="0 0 0"/>
+      <geometry><box size="0.30 0.20 0.10"/></geometry>
+    </visual>
+  </link>
+
+  <link name="laser_link">
+    <inertial>
+      <mass value="0.01"/>
+      <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+    </inertial>
+    <visual>
+      <geometry><cylinder radius="0.02" length="0.02"/></geometry>
+    </visual>
+  </link>
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="laser_link"/>
+    <!-- 차체 앞쪽 위. 차체 윗면(z=+0.05)보다 높게 둬서 빔이 차체에 안 막히게. -->
+    <origin xyz="0.10 0 0.08" rpy="0 0 0"/>
+  </joint>
+
+  <!-- 전방 카메라 (ArUco/YOLO 입력) -->
+  <link name="camera_link">
+    <inertial>
+      <mass value="0.01"/>
+      <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+    </inertial>
+    <visual>
+      <geometry><box size="0.02 0.04 0.02"/></geometry>
+    </visual>
+  </link>
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <!-- 차체 앞면, 라이다보다 약간 낮게. 광축 +X(전방). -->
+    <origin xyz="0.15 0 0.06" rpy="0 0 0"/>
+  </joint>
+
+  <gazebo reference="base_link"><material>Gazebo/Blue</material></gazebo>
+  <gazebo reference="laser_link"><material>Gazebo/Red</material></gazebo>
+  <gazebo reference="camera_link"><material>Gazebo/Green</material></gazebo>
+
+  <!-- ── 구동: planar move (kinematic unicycle) ───────────────────── -->
+  <gazebo>
+    <plugin name="planar_move" filename="libgazebo_ros_planar_move.so">
+      <commandTopic>cmd_vel</commandTopic>
+      <odometryTopic>odom</odometryTopic>
+      <odometryFrame>odom</odometryFrame>
+      <robotBaseFrame>base_link</robotBaseFrame>
+      <odometryRate>20.0</odometryRate>
+    </plugin>
+  </gazebo>
+
+  <!-- ── 360° 라이다 (CPU ray, GPU 불필요) ────────────────────────── -->
+  <gazebo reference="laser_link">
+    <sensor type="ray" name="laser">
+      <pose>0 0 0 0 0 0</pose>
+      <visualize>true</visualize>
+      <update_rate>20</update_rate>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>360</samples>
+            <resolution>1</resolution>
+            <min_angle>-3.14159</min_angle>
+            <max_angle> 3.14159</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.05</min>
+          <max>4.0</max>
+          <resolution>0.01</resolution>
+        </range>
+      </ray>
+      <plugin name="laser_plugin" filename="libgazebo_ros_laser.so">
+        <topicName>/scan</topicName>
+        <frameName>laser_link</frameName>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- ── 카메라 (Gazebo Classic, libgazebo_ros_camera) ───────────────
+       /usb_cam/image_raw 발행 → aruco_detector / yolo_node 가 구독.
+       헤드리스에선 xvfb + 소프트웨어 GL 로 오프스크린 렌더된다. -->
+  <gazebo reference="camera_link">
+    <sensor type="camera" name="usb_cam">
+      <always_on>true</always_on>
+      <update_rate>15</update_rate>
+      <visualize>false</visualize>
+      <camera name="usb_cam">
+        <horizontal_fov>1.0472</horizontal_fov>   <!-- 60° -->
+        <image>
+          <width>640</width>
+          <height>480</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip><near>0.05</near><far>20.0</far></clip>
+      </camera>
+      <plugin name="usb_cam_plugin" filename="libgazebo_ros_camera.so">
+        <cameraName>usb_cam</cameraName>
+        <imageTopicName>image_raw</imageTopicName>
+        <cameraInfoTopicName>camera_info</cameraInfoTopicName>
+        <frameName>camera_link</frameName>
+        <updateRate>15.0</updateRate>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- ── IMU ──────────────────────────────────────────────────────── -->
+  <gazebo reference="base_link">
+    <sensor name="imu_sensor" type="imu">
+      <always_on>true</always_on>
+      <update_rate>50</update_rate>
+      <plugin name="imu_plugin" filename="libgazebo_ros_imu_sensor.so">
+        <topicName>/imu/data</topicName>
+        <bodyName>base_link</bodyName>
+        <frameName>base_link</frameName>
+        <updateRateHZ>50.0</updateRateHZ>
+        <gaussianNoise>0.0</gaussianNoise>
+        <xyzOffset>0 0 0</xyzOffset>
+        <rpyOffset>0 0 0</rpyOffset>
+        <initialOrientationAsReference>false</initialOrientationAsReference>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+</robot>

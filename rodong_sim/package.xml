@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>rodong_sim</name>
+  <version>0.0.1</version>
+  <description>Simple box-model Gazebo simulation to exercise RODONG FSM / obstacle-avoidance logic without Xycar hardware.</description>
+  <maintainer email="yulee3542@gmail.com">Yulee</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>xycar_msgs</exec_depend>
+  <exec_depend>gazebo_ros</exec_depend>
+  <exec_depend>gazebo_plugins</exec_depend>
+  <exec_depend>tf</exec_depend>
+</package>

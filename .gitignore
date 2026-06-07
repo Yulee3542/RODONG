@@ -20,3 +20,11 @@ __pycache__/
 # ── OS / editor ───────────────────────────────────────────────
 .DS_Store
 *.swp
+
+# ── YOLO 학습 생성물 (재생성됨) ───────────────────────────────
+*.cache
+rodong_yolo/dataset/data_local.yaml
+rodong_yolo/runs/rodong_yolov8n_v2/
+
+# ── ROS1 시뮬 catkin 빌드 워크스페이스 (sim_build.sh 가 재생성) ──
+catkin_ws/
