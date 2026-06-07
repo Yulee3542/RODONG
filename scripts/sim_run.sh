@@ -4,6 +4,7 @@
 #   scripts/sim_run.sh gui              # 회피 월드, Gazebo GUI (데스크톱 터미널)
 #   scripts/sim_run.sh perception       # 카메라+ArUco+YOLO 월드, 헤드리스
 #   scripts/sim_run.sh perception gui   # 인지 월드, GUI
+#   scripts/sim_run.sh full gui         # 풀 시나리오(회피→앞ArUco→유턴→뒤ArUco), GUI
 # 주행 시작은 다른 터미널에서:  scripts/sim_cmd.sh INIT
 set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -17,6 +18,7 @@ GUI=false
 for a in "$@"; do
   case "$a" in
     perception) LAUNCH="rodong_perception.launch" ;;
+    full)       LAUNCH="rodong_full.launch" ;;
     gui)        GUI=true ;;
     headless)   GUI=false ;;
   esac
@@ -36,5 +38,7 @@ echo "==> RODONG 시뮬 기동 (launch=$LAUNCH gui=$GUI). IDLE → 'scripts/sim_
 docker compose -f "$COMPOSE" run --rm --name rodong-sim sim bash -lc "
   source /opt/ros/noetic/setup.bash
   source /workspace/catkin_ws/devel/setup.bash
+  # .bashrc 의 모델 경로는 비대화형 로그인 셸에선 안 읽힘 → 여기서 직접 export
+  export GAZEBO_MODEL_PATH=/workspace/rodong_sim/models\${GAZEBO_MODEL_PATH:+:\$GAZEBO_MODEL_PATH}
   $WRAP roslaunch rodong_sim $LAUNCH gui:=$GUI app_dir:='$APP_DIR'
 "
