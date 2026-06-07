@@ -69,7 +69,8 @@ USE_CLIMB = False        # 모델 성능 부족 → CLIMB 판정 비활성
 # ── 회피 서브-FSM (main) ───────────────────────────────────────────
 AVOID_TRIG_ANG = 25      # |vfh_angle| 이 이상이면 회피 진입
 AVOID_HOLD_MIN = 1.5     # 회피 조향 최소 유지 시간 (s)
-AVOID_CLEAR_CM = 55      # 전방 이 이상이면 회피 해제 조건
+AVOID_CLEAR_CM = 55      # 전방 이 이상이면 회피 해제 / 접근 재진입(히스테리시스 상한)
+APPROACH_AVOID_CM = 40   # 접근 중 전방 이 미만이면 회피로 전환(히스테리시스 하한)
 
 # ── 헤딩 복귀 (main, RECOVER) ──────────────────────────────────────
 RECOVER_TOL_DEG = 8.0    # 이 오차 이내면 복귀 완료

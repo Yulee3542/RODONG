@@ -156,11 +156,15 @@ class RodongMain:
         if s != self.state:
             rospy.loginfo('[Main] %s → %s', self.state, s)
             self.prev_state = self.state
+            # 접근 중 장애물로 BUG_DRIVE 와 토글할 때는 접근이 논리적으로 이어지므로
+            # 마커 PID 를 리셋하지 않는다(잦은 리셋 → 미분킥으로 조향 떨림 방지).
+            marker_toggle = {self.state, s} == {State.BUG_DRIVE, State.MARKER_APPROACH}
             self.state = s
-            # 상태 전환 시 회피 서브-FSM + 제어기 리셋
+            # 상태 전환 시 회피 서브-FSM 은 항상 리셋(새 회피를 깨끗이 시작).
             self._reset_avoid()
-            self.marker_pid.reset()
-            self._marker_prev_t = None
+            if not marker_toggle:
+                self.marker_pid.reset()
+                self._marker_prev_t = None
 
     def _reset_avoid(self):
         self.avoid_phase    = Avoid.NONE
@@ -463,6 +467,13 @@ class RodongMain:
         rospy.loginfo('[Sonar] 정면(%.0fcm) 우측 더 막힘 → 좌조향', min_dist)
         return -cfg.AVOID_FULL_ANG
 
+    def _approach_obstacle(self):
+        """MARKER_APPROACH 중 전방 장애물이 가까우면 BUG_DRIVE 회피로 넘길지 판정.
+        이탈은 하한(APPROACH_AVOID_CM=40, BUG_DRIVE 가 실제 조향을 시작하는 거리와 정렬),
+        재진입은 상한(AVOID_CLEAR_CM=55)으로 두어 40~55cm 히스테리시스로 왕복을 막는다."""
+        front = front_min(self.sonar)
+        return 0 < front < cfg.APPROACH_AVOID_CM
+
     def _bug_drive_step(self):
         now   = rospy.Time.now()
         front = front_min(self.sonar)
@@ -561,6 +572,12 @@ class RodongMain:
                         rospy.loginfo('[Main] 마커 접근 완료(%.0fpx) → UTURN', self.marker_pixel_w)
                         self.stop_motor()
                         self.set_state(State.UTURN)
+                    elif self._approach_obstacle():
+                        # 마커가 보여도 전방 장애물이 가까우면 마커 추종을 멈추고
+                        # BUG_DRIVE 로 돌아가 (검증된) 회피 서브-FSM 으로 처리한다.
+                        # 장애물이 치워지면 BUG_DRIVE 가 다시 MARKER_APPROACH 로 넘긴다.
+                        rospy.loginfo_throttle(2, '[Approach] 전방 장애물 → BUG_DRIVE 회피로 전환')
+                        self.set_state(State.BUG_DRIVE)
                     else:
                         # bearing(rad) 오차 → PID 조향 (우측 마커=+bearing=우조향)
                         dt = self._dt('_marker_prev_t')
@@ -576,7 +593,10 @@ class RodongMain:
                     self.marker_seen += 1
                 else:
                     self.marker_seen = 0
-                if self.marker_seen >= cfg.MARKER_DEBOUNCE:
+                # 전방이 트였을 때만 접근 전환(장애물이 앞에 있으면 먼저 회피).
+                if (self.marker_seen >= cfg.MARKER_DEBOUNCE
+                        and self.avoid_phase == Avoid.NONE
+                        and front_min(self.sonar) > cfg.AVOID_CLEAR_CM):
                     rospy.loginfo('[Main] 마커 → MARKER_APPROACH')
                     self.marker_seen = 0
                     self.set_state(State.MARKER_APPROACH)
