@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
-<!-- 얇은 패널에 ArUco id=1 텍스처. 카메라가 보는 -X 면에 마커가 보인다.
-     마커 실제 크기 0.15m (aruco_detector.MARKER_SIZE_M 과 일치 → 거리추정 정상). -->
+<!-- ArUco id=1 texture on a thin panel. The marker is visible on the -X face the camera sees.
+     Marker real size 0.15m (matches aruco_detector.MARKER_SIZE_M -> distance estimation is correct). -->
 <sdf version="1.6">
   <model name="aruco_marker">
     <static>true</static>

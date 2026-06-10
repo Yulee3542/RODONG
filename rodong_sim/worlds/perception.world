@@ -1,14 +1,14 @@
 <?xml version="1.0"?>
-<!-- 인지(perception) 테스트 월드: 정면에 ArUco id=1 패널.
-     차는 원점에서 +X 를 바라보며 출발 → 마커 검출 → MARKER_APPROACH → UTURN.
-     aruco_marker 모델은 GAZEBO_MODEL_PATH(=/workspace/rodong_sim/models)에서 로드. -->
+<!-- Perception test world: an ArUco id=1 panel straight ahead.
+     The car starts at the origin facing +X → detect marker → MARKER_APPROACH → UTURN.
+     The aruco_marker model loads from GAZEBO_MODEL_PATH (=/workspace/rodong_sim/models). -->
 <sdf version="1.6">
   <world name="default">
 
     <include><uri>model://ground_plane</uri></include>
     <include><uri>model://sun</uri></include>
 
-    <!-- 정면 1.3m, 카메라 광축 높이(z≈0.16)에 마커 중심. -->
+    <!-- 1.3m ahead, marker center at the camera optical-axis height (z≈0.16). -->
     <include>
       <name>aruco_1</name>
       <uri>model://aruco_marker</uri>

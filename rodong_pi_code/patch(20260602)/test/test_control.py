@@ -10,9 +10,9 @@ def test_pure_p():
 
 def test_derivative_term():
     pid = PID(kp=0.0, kd=1.0)
-    # 첫 스텝은 prev_err 없음 → 미분 0
+    # first step has no prev_err → derivative 0
     assert pid.step(1.0, dt=1.0) == 0.0
-    # 오차 1→3, dt=1 → de/dt=2 → 출력 2
+    # error 1→3, dt=1 → de/dt=2 → output 2
     assert pid.step(3.0, dt=1.0) == 2.0
 
 
@@ -38,5 +38,5 @@ def test_reset_clears_state():
     pid = PID(kp=0.0, kd=1.0)
     pid.step(5.0, dt=1.0)
     pid.reset()
-    # reset 후 첫 스텝은 다시 미분 0
+    # after reset, the first step is derivative 0 again
     assert pid.step(9.0, dt=1.0) == 0.0

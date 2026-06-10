@@ -1,26 +1,35 @@
 # -*- coding: utf-8 -*-
 """
-rodong_config.py — RODONG 공용 설정 (튜닝 상수 단일 출처)
+rodong_config.py — RODONG shared configuration (single source of tuning constants)
 ================================================================
-모든 노드(vfh_planner / rodong_main / aruco_detector ...)가 공유하는 상수를
-한 곳에 모은다. ROS 의존성이 없으므로 어디서나 import 가능하고 단위테스트가 쉽다.
+Every node (vfh_planner / rodong_main / aruco_detector ...) imports its tuning
+constants from here. The module has no ROS dependency, so it can be imported
+anywhere and unit-tested easily.
 
-이전에는 같은 값(속도/임계/초음파 빔 매핑/ArUco ID 등)이 vfh_planner.py 와
-rodong_main.py 에 따로 정의되어 서로 어긋날 위험이 있었다 → 여기로 통합.
+Previously the same values (speeds / thresholds / sonar beam mapping / ArUco id ...)
+were duplicated in vfh_planner.py and rodong_main.py and could drift apart — they
+are unified here.
 """
 
-# ── 속도 [모터 단위] ───────────────────────────────────────────────
-SPEED_DRIVE  = 25      # 일반/회피/접근/유턴 공통 주행 속도
-SPEED_MANUAL = 20      # MANUAL 모드 속도
-SPEED_BACK   = -25     # 전방향 막힘 시 후진 (vfh_planner)
+# ── Speed [motor units] ────────────────────────────────────────────
+# ★★ Single source of truth for speed: change this ONE line (SPEED) and every
+#    driving speed follows. (forward / avoid / approach / U-turn / MANUAL / reverse
+#    are all derived from SPEED below.)
+SPEED = 30             # ← edit here only
+# The motor does not turn enough at low speed (ESC deadband), so every situation
+# uses the same unified speed.
 
-# ── 조향 [deg] ─────────────────────────────────────────────────────
-ANGLE_MAX      = 90    # 물리 최대 조향
-AVOID_FULL_ANG = 90    # 회피 풀조향
+SPEED_DRIVE  = SPEED   # normal / avoid / approach / U-turn driving speed
+SPEED_MANUAL = SPEED   # MANUAL mode speed
+SPEED_BACK   = -SPEED  # reverse when fully blocked (vfh_planner)
 
-# ── 초음파 빔 인덱스 / 각도 [deg] (메모리 매핑) ────────────────────
-#   idx0=좌(-90)  1=좌전(-45)  2=우전(+45)  3=전(0)
-#   idx4=우(+90)  5=우후(+135) 6=후(180)    7=좌후(-135)
+# ── Steering [deg] ─────────────────────────────────────────────────
+ANGLE_MAX      = 90    # physical max steering
+AVOID_FULL_ANG = 90    # full avoidance steering
+
+# ── Sonar beam index / angle [deg] (memorized mapping) ─────────────
+#   idx0=left(-90)  1=front-left(-45)  2=front-right(+45)  3=front(0)
+#   idx4=right(+90) 5=rear-right(+135) 6=rear(180)         7=rear-left(-135)
 BEAM_ANGLES   = [-90, -45, 45, 0, 90, 135, 180, -135]
 SONAR_LEFT    = 0
 SONAR_FRONT_L = 1
@@ -33,69 +42,76 @@ SONAR_REAR_L  = 7
 FRONT_IDXS = (SONAR_FRONT_L, SONAR_FRONT_R, SONAR_FRONT)   # (1, 2, 3)
 REAR_IDXS  = (SONAR_REAR_R, SONAR_REAR, SONAR_REAR_L)      # (5, 6, 7)
 
-# ── 초음파 거리 임계 [cm] ──────────────────────────────────────────
-THRESHOLD       = 40.0   # vfh: 이 거리 이하 → 장애물 간주
-SLOW_DIST       = 50.0   # vfh: 이 거리 이하 → 감속
-EMERGENCY       = 12.0   # vfh: 정면 비상 (참고값)
-SONAR_EMERGENCY = 15     # main: 전방 비상 (이하 → 후진)
-SONAR_REVERSE   = 15     # main: 후진 중 후방 장애물 감지 거리
+# ── Sonar distance thresholds [cm] ─────────────────────────────────
+THRESHOLD       = 40.0   # vfh: at/below this distance → treated as an obstacle
+SLOW_DIST       = 50.0   # vfh: at/below this distance → slow down
+EMERGENCY       = 12.0   # vfh: front emergency (reference value)
+SONAR_EMERGENCY = 15     # main: front emergency (at/below → reverse)
+SONAR_REVERSE   = 15     # main: rear-obstacle detection distance while reversing
 
-# ── VFH 히스토그램 ─────────────────────────────────────────────────
+# ── VFH histogram ──────────────────────────────────────────────────
 N_SECTORS    = 7
 SECTOR_DEG   = 30.0
-SECTOR_ANGLE = [-90, -90, -90, 0, 90, 90, 90]   # 섹터 중심 → 조향각
-OPEN_THRESH  = 0.5       # hist 이하면 통행 가능 섹터로 간주
-W_GOAL    = 1.0          # goal 방향 선호
-W_HEADING = 0.4          # 직진 유지 (지그재그 방지)
-W_SMOOTH  = 0.2          # 직전 방향 유지 (떨림 방지)
+SECTOR_ANGLE = [-90, -90, -90, 0, 90, 90, 90]   # sector center → steering angle
+OPEN_THRESH  = 0.5       # hist at/below this → sector considered passable
+W_GOAL    = 1.0          # prefer goal direction
+W_HEADING = 0.4          # keep going straight (anti-zigzag)
+W_SMOOTH  = 0.2          # keep previous direction (anti-jitter)
 
-# ── 타임아웃 [s] ───────────────────────────────────────────────────
+# ── Timeouts [s] ───────────────────────────────────────────────────
 GOAL_TIMEOUT   = 1.5
 YOLO_TIMEOUT   = 1.0
-BOUND_TIMEOUT  = 0.7     # /rodong/boundary 유효 시간
-MARKER_TIMEOUT = 0.5     # /aruco_pose 신선도 (main 마커 판정)
+BOUND_TIMEOUT  = 0.7     # validity window for /rodong/boundary
+MARKER_TIMEOUT = 0.5     # /aruco_pose freshness (marker decision in main)
 
-# ── 바닥 경계선 (vfh) ──────────────────────────────────────────────
-BOUND_TH      = 0.10     # 좌/중/우 구역 임계
-BOUND_NEAR_TH = 0.15     # near(차 바로 앞) 임계
+# ── Floor boundary line (vfh) ──────────────────────────────────────
+BOUND_TH      = 0.10     # left/center/right zone threshold
+BOUND_NEAR_TH = 0.15     # near (right in front of the car) threshold
 
 # ── YOLO ───────────────────────────────────────────────────────────
 CLS_CLIMB  = 0
 CLS_AVOID  = 1
 CLS_IGNORE = 2
 CLIMB_BOTTOM_RATIO = 0.82
-USE_CLIMB = False        # 모델 성능 부족 → CLIMB 판정 비활성
+USE_CLIMB = False        # model accuracy too low → CLIMB decision disabled
 
-# ── 회피 서브-FSM (main) ───────────────────────────────────────────
-AVOID_TRIG_ANG = 25      # |vfh_angle| 이 이상이면 회피 진입
-AVOID_HOLD_MIN = 1.5     # 회피 조향 최소 유지 시간 (s)
-AVOID_CLEAR_CM = 55      # 전방 이 이상이면 회피 해제 / 접근 재진입(히스테리시스 상한)
-APPROACH_AVOID_CM = 40   # 접근 중 전방 이 미만이면 회피로 전환(히스테리시스 하한)
+# ── Avoidance sub-FSM (main) ───────────────────────────────────────
+AVOID_TRIG_ANG = 32      # if |vfh_angle| >= this → enter avoidance sub-FSM (±full-steer latch).
+                         # the vfh histogram only emits -90/0/+90, so hardware behavior is
+                         # unchanged (±90 > 32). vision proportional steering (<=30°) stays
+                         # below this → smooth following without latching.
+AVOID_HOLD_MIN = 1.5     # minimum hold time for avoidance steering (s)
+AVOID_HOLD_MAX = 3.5     # maximum hold time for avoidance steering (s). Even if the front
+                         # never clears (front < CLEAR), after this time force a transition
+                         # to heading recovery to straighten the wheels.
+                         # (prevents "driving forward with the wheels cranked indefinitely")
+AVOID_CLEAR_CM = 55      # front >= this → release avoidance / re-enter approach (hysteresis upper)
+APPROACH_AVOID_CM = 40   # during approach, front < this → switch to avoidance (hysteresis lower)
 
-# ── 헤딩 복귀 (main, RECOVER) ──────────────────────────────────────
-RECOVER_TOL_DEG = 8.0    # 이 오차 이내면 복귀 완료
-RECOVER_TIMEOUT = 4.0    # 복귀 단계 타임아웃 (s)
+# ── Heading recovery (main, RECOVER) ───────────────────────────────
+RECOVER_TOL_DEG = 8.0    # within this error → recovery complete
+RECOVER_TIMEOUT = 4.0    # recovery phase timeout (s)
 
-# ── 마커 (main) ────────────────────────────────────────────────────
+# ── Marker (main) ──────────────────────────────────────────────────
 TARGET_ID       = 1
-MARKER_CLOSE_PX = 80     # 마커 픽셀폭 이 이상 → 접근 완료
-MARKER_DEBOUNCE = 5      # 연속 검출 프레임 수
+MARKER_CLOSE_PX = 80     # marker pixel width >= this → approach complete
+MARKER_DEBOUNCE = 5      # consecutive detection frames
 
 # ── MANUAL dead-reckoning ──────────────────────────────────────────
 CM_PER_SEC_FWD  = 15.0
 CM_PER_DEG_TURN = 0.12
 
-# ── 유턴 (IMU K-turn) ──────────────────────────────────────────────
+# ── U-turn (IMU K-turn) ────────────────────────────────────────────
 UTURN_TARGET_DEG = 170.0
 UTURN_SEG_DEG    = 60.0
 UTURN_SEG_TO     = 4.0
 UTURN_MAX_SEG    = 5
-# IMU 없을 때 시간 기반 fallback: (방향(+전진/-후진), 조향, 지속시간 s)
+# Time-based fallback when no IMU: (direction(+fwd/-rev), steering, duration s)
 UTURN_TIMED_STEPS = [(-1, -90, 2.0), (+1, 90, 2.0), (-1, -90, 2.0)]
 
-# ── PID 게인 ───────────────────────────────────────────────────────
-# 마커 접근: bearing[rad] 오차 → 조향[deg]. (이전: 픽셀오차×0.47 단순 P)
-#   bearing≈0.5rad(화면끝) → kp*0.5 ≈ 60° → 풀오프셋에서 강한 조향.
+# ── PID gains ──────────────────────────────────────────────────────
+# Marker approach: bearing[rad] error → steering[deg]. (was: pixel error × 0.47 simple P)
+#   bearing≈0.5rad (screen edge) → kp*0.5 ≈ 60° → strong steering at full offset.
 MARKER_PID  = dict(kp=120.0, ki=0.0, kd=15.0, out_limit=ANGLE_MAX)
-# 헤딩 복귀: yaw 오차[deg] → 조향[deg]. (이전: -3.0×오차 단순 P, kd 추가로 댐핑)
+# Heading recovery: yaw error[deg] → steering[deg]. (was: -3.0×error simple P; kd added for damping)
 RECOVER_PID = dict(kp=3.0, ki=0.0, kd=0.4, out_limit=ANGLE_MAX)

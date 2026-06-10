@@ -1,12 +1,12 @@
 <?xml version="1.0"?>
 <!--
-  rodong_full.launch — 풀 시나리오: 회피 → 앞 ArUco → 유턴 → 뒤 ArUco.
-  실행:
-    scripts/sim_run.sh full        # 헤드리스
-    scripts/sim_run.sh full gui    # 데스크톱 GUI
-  주행 시작:
+  rodong_full.launch — full scenario: avoid → front ArUco → U-turn → rear ArUco.
+  Run:
+    scripts/sim_run.sh full        # headless
+    scripts/sim_run.sh full gui    # desktop GUI
+  Start driving:
     scripts/sim_cmd.sh INIT
-  흐름: BUG_DRIVE(회피) → MARKER_APPROACH(앞) → UTURN → BUG_DRIVE → MARKER_APPROACH(뒤)
+  Flow: BUG_DRIVE(avoid) → MARKER_APPROACH(front) → UTURN → BUG_DRIVE → MARKER_APPROACH(rear)
 -->
 <launch>
 
@@ -25,22 +25,30 @@
         args="-param robot_description -urdf -model rodong -x 0 -y 0 -z 0.10"/>
 
   <node name="sim_bridge" pkg="rodong_sim" type="sim_bridge.py" output="screen">
-    <!-- 현실적 Ackermann 조향(약 35°)·중속. 60°/0.75m/s 는 yaw_rate 가 과해
-         회피 조향 유지 중 차가 거의 한 바퀴 돌아 헤딩 복귀가 실패했음. -->
+    <!-- Realistic Ackermann steering (~35°) and medium speed. 60°/0.75m/s gives too much
+         yaw_rate, so during avoidance steering the car nearly does a full turn and heading
+         recovery fails. -->
     <param name="speed_to_ms"   value="0.02"/>
     <param name="wheelbase"     value="0.30"/>
     <param name="max_steer_deg" value="35.0"/>
     <param name="max_cm"        value="300"/>
   </node>
 
-  <!-- 애플리케이션 노드 (patch 원본 단일 소스 실행) -->
+  <!-- application nodes (run the patch originals as a single source) -->
   <node name="vfh_planner"    pkg="rodong_sim" type="run_app.py" output="screen"
-        args="$(arg app_dir) vfh_planner"/>
+        args="$(arg app_dir) vfh_planner">
+    <!-- sim: vision proportional (gentle) avoidance — the closer a front AVOID is, the more it
+         steers (<25°) so rodong_main follows smoothly without latching. Combined with the
+         center-only emergency, it threads through with a small bias. -->
+    <param name="vision_steer_enable" value="true"/>
+  </node>
   <node name="rodong_main"    pkg="rodong_sim" type="run_app.py" output="screen"
         args="$(arg app_dir) rodong_main"/>
   <node name="aruco_detector" pkg="rodong_sim" type="run_app.py" output="screen"
         args="$(arg app_dir) aruco_detector"/>
-  <node name="yolo_node"      pkg="rodong_sim" type="run_app.py" output="screen"
-        args="$(arg app_dir) yolo_node"/>
+  <!-- sim-only vision detector: the real yolo_node (rodong.onnx) cannot detect Gazebo's
+       solid-color boxes, so this saturation-based color-box shim publishes /rodong/yolo.
+       → vfh_planner takes it as a virtual obstacle and performs vision-based left/right avoidance. -->
+  <node name="sim_vision_node" pkg="rodong_sim" type="sim_vision_node.py" output="screen"/>
 
 </launch>

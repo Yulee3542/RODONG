@@ -1,13 +1,13 @@
 <?xml version="1.0"?>
-<!-- 회피 로직을 볼 수 있는 간단한 장애물 코스. 박스(높이 0.3m)들이
-     라이다 높이(z≈0.18m)에서 잘 보이도록 배치돼 있다. -->
+<!-- A simple obstacle course to see the avoidance logic. The boxes (0.3m tall) are
+     placed so they are clearly visible at the lidar height (z≈0.18m). -->
 <sdf version="1.6">
   <world name="default">
 
     <include><uri>model://ground_plane</uri></include>
     <include><uri>model://sun</uri></include>
 
-    <!-- 정면 약간 우측 -->
+    <!-- front, slightly right -->
     <model name="obstacle_1">
       <static>true</static>
       <pose>1.5 0.15 0.15 0 0 0</pose>
@@ -20,7 +20,7 @@
       </link>
     </model>
 
-    <!-- 좌측 -->
+    <!-- left -->
     <model name="obstacle_2">
       <static>true</static>
       <pose>2.8 -0.6 0.15 0 0 0</pose>
@@ -33,7 +33,7 @@
       </link>
     </model>
 
-    <!-- 우측 -->
+    <!-- right -->
     <model name="obstacle_3">
       <static>true</static>
       <pose>4.0 0.5 0.15 0 0 0</pose>
@@ -46,7 +46,7 @@
       </link>
     </model>
 
-    <!-- 정면 막다른 벽 (비상 후진 + RECOVER 트리거 확인용) -->
+    <!-- front dead-end wall (to verify emergency reverse + RECOVER triggering) -->
     <model name="wall_front">
       <static>true</static>
       <pose>5.5 0 0.25 0 0 0</pose>

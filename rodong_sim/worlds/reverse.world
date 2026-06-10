@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
-<!-- 비상 후진 테스트: 차 정면 가까이(≈0.45m) 벽. INIT 하면 곧바로 전방
-     SONAR_EMERGENCY(15cm) 안으로 들어가 reverse_motor → 바퀴 펴기 → RECOVER 가 트리거된다. -->
+<!-- Emergency-reverse test: a wall close in front of the car (≈0.45m). After INIT it
+     immediately enters within front SONAR_EMERGENCY(15cm), triggering reverse_motor →
+     straighten wheels → RECOVER. -->
 <sdf version="1.6">
   <world name="default">
 

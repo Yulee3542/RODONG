@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-rodong_train.py  (RODONG12 - YOLO 학습 파이프라인, from scratch)
+rodong_train.py  (RODONG12 - YOLO training pipeline, from scratch)
 ================================================================
-데이터셋: Roboflow "Stairs & ramps" (Vasile Grosu)
-  - ramp  → CLIMB (class 0)
-  - stairs→ AVOID (class 1)
-환경: 미니PC i5-6500T (CPU 전용, GPU 없음)
-목표: YOLOv8n 2-class 학습 → ONNX export → Pi 배포
+Dataset: Roboflow "Stairs & ramps" (Vasile Grosu)
+  - ramp  -> CLIMB (class 0)
+  - stairs-> AVOID (class 1)
+Environment: mini PC i5-6500T (CPU only, no GPU)
+Goal: train YOLOv8n 2-class -> ONNX export -> deploy to Pi
 
-CPU 학습 최적화 원칙:
-  - 입력 320 (640 대비 ~4배 빠름)
-  - epochs 적게 (50), batch 작게 (8)
-  - workers 줄임 (4코어), augmentation 가볍게
-  - nano 모델 (yolov8n)
+CPU training optimization principles:
+  - input 320 (~4x faster than 640)
+  - fewer epochs (50), small batch (8)
+  - fewer workers (4 cores), light augmentation
+  - nano model (yolov8n)
 
-사용 순서:
+Usage order:
   1) pip install ultralytics roboflow
-  2) Roboflow에서 API 키 발급 (무료): https://app.roboflow.com → Settings → API
-  3) ROBOFLOW_API_KEY 환경변수 설정 or 아래 직접 입력
-  4) python3 rodong_train.py --download   # 데이터셋 다운로드 + 클래스 재매핑
-  5) python3 rodong_train.py --train      # CPU 학습
-  6) python3 rodong_train.py --export     # ONNX export (Pi용)
-  7) python3 rodong_train.py --all        # 위 전부 순차 실행
+  2) Get an API key from Roboflow (free): https://app.roboflow.com -> Settings -> API
+  3) Set the ROBOFLOW_API_KEY env var, or enter it directly below
+  4) python3 rodong_train.py --download   # download dataset + remap classes
+  5) python3 rodong_train.py --train      # CPU training
+  6) python3 rodong_train.py --export     # ONNX export (for the Pi)
+  7) python3 rodong_train.py --all        # run all of the above in sequence
 """
 
 import os
@@ -31,38 +31,38 @@ import argparse
 import shutil
 import glob
 
-# ── 설정 ─────────────────────────────────────────────────────────
+# ── Settings ─────────────────────────────────────────────────────
 ROBOFLOW_WORKSPACE = "vasile-grosu-uslqx"
 ROBOFLOW_PROJECT   = "stairs-ramps"
-ROBOFLOW_VERSION   = 1            # 첫 실행 시 사이트에서 최신 버전 확인 후 조정
+ROBOFLOW_VERSION   = 1            # on first run, check the latest version on the site and adjust
 
-# 결과물 경로
+# Output paths
 WORK_DIR   = os.path.expanduser("~/2. OWOD for Rodong/rodong_yolo")
 DATA_DIR   = os.path.join(WORK_DIR, "dataset")
 RUNS_DIR   = os.path.join(WORK_DIR, "runs")
 ONNX_OUT   = os.path.join(WORK_DIR, "rodong.onnx")
 
-# 클래스 매핑: Roboflow 원본 클래스명 → RODONG 클래스 ID
-# (다운로드 후 data.yaml 의 names 를 보고 정확한 원본명에 맞춰 조정)
+# Class mapping: Roboflow original class name -> RODONG class ID
+# (after download, check the names in data.yaml and adjust to the exact original names)
 CLASS_MAP = {
     "ramp":   0,   # CLIMB
     "ramps":  0,
     "stair":  1,   # AVOID
     "stairs": 1,
 }
-RODONG_NAMES = ["CLIMB", "AVOID"]   # 최종 2-class
+RODONG_NAMES = ["CLIMB", "AVOID"]   # final 2-class
 
-# 학습 하이퍼파라미터 (CPU 전용)
+# Training hyperparameters (CPU only)
 TRAIN_CFG = dict(
-    model    = "yolov8n.pt",   # nano (가장 가벼움)
-    imgsz    = 320,            # CPU 가속을 위해 작게
+    model    = "yolov8n.pt",   # nano (lightest)
+    imgsz    = 320,            # small for CPU speedup
     epochs   = 50,
     batch    = 8,
-    workers  = 4,              # i5 4코어
+    workers  = 4,              # i5 4 cores
     patience = 15,             # early stopping
     device   = "cpu",
     optimizer= "auto",
-    # 가벼운 augmentation (CPU 부담 ↓)
+    # Light augmentation (lower CPU load)
     mosaic   = 0.5,
     mixup    = 0.0,
     hsv_h    = 0.015,
@@ -73,26 +73,26 @@ TRAIN_CFG = dict(
 
 # ────────────────────────────────────────────────────────────────
 def step_download():
-    """Roboflow 데이터셋 다운로드 + RODONG 2-class 재매핑."""
+    """Download the Roboflow dataset + remap to RODONG 2-class."""
     try:
         from roboflow import Roboflow
     except ImportError:
-        sys.exit("ERROR: pip install roboflow 먼저 실행하세요.")
+        sys.exit("ERROR: run 'pip install roboflow' first.")
 
     api_key = os.environ.get("ROBOFLOW_API_KEY", "").strip()
     if not api_key:
-        sys.exit("ERROR: ROBOFLOW_API_KEY 환경변수를 설정하세요.\n"
+        sys.exit("ERROR: set the ROBOFLOW_API_KEY env var.\n"
                  "  export ROBOFLOW_API_KEY='your_key_here'")
 
     os.makedirs(WORK_DIR, exist_ok=True)
-    print(f"[download] Roboflow에서 {ROBOFLOW_PROJECT} v{ROBOFLOW_VERSION} 받는 중...")
+    print(f"[download] downloading {ROBOFLOW_PROJECT} v{ROBOFLOW_VERSION} from Roboflow...")
 
     rf = Roboflow(api_key=api_key)
     proj = rf.workspace(ROBOFLOW_WORKSPACE).project(ROBOFLOW_PROJECT)
     dataset = proj.version(ROBOFLOW_VERSION).download("yolov8", location=DATA_DIR)
 
-    print(f"[download] 완료: {DATA_DIR}")
-    print("[download] data.yaml 의 names 를 확인하고 CLASS_MAP 을 맞추세요:")
+    print(f"[download] done: {DATA_DIR}")
+    print("[download] check the names in data.yaml and align CLASS_MAP:")
     _print_data_yaml()
     _remap_labels()
 
@@ -107,26 +107,26 @@ def _print_data_yaml():
 
 
 def _remap_labels():
-    """원본 클래스 ID → RODONG ID 로 라벨 파일 재작성.
-    원본 data.yaml 의 names 순서를 읽어 CLASS_MAP 기준으로 변환."""
+    """Rewrite label files from original class ID -> RODONG ID.
+    Reads the names order from the original data.yaml and converts using CLASS_MAP."""
     import yaml
     yml = os.path.join(DATA_DIR, "data.yaml")
     with open(yml) as f:
         cfg = yaml.safe_load(f)
     orig_names = cfg.get("names", [])
-    print(f"[remap] 원본 클래스: {orig_names}")
+    print(f"[remap] original classes: {orig_names}")
 
-    # 원본 ID → RODONG ID 변환표
+    # original ID -> RODONG ID conversion table
     id_map = {}
     for orig_id, name in enumerate(orig_names):
         key = str(name).strip().lower()
         if key in CLASS_MAP:
             id_map[orig_id] = CLASS_MAP[key]
         else:
-            id_map[orig_id] = None   # 버릴 클래스
-    print(f"[remap] ID 변환표 (원본→RODONG, None=제거): {id_map}")
+            id_map[orig_id] = None   # class to drop
+    print(f"[remap] ID conversion table (original->RODONG, None=removed): {id_map}")
 
-    # 모든 split 의 라벨 .txt 재작성
+    # rewrite label .txt files for all splits
     for split in ("train", "valid", "test"):
         lbl_dir = os.path.join(DATA_DIR, split, "labels")
         if not os.path.isdir(lbl_dir):
@@ -149,28 +149,28 @@ def _remap_labels():
             with open(txt, "w") as f:
                 f.write("\n".join(new_lines) + ("\n" if new_lines else ""))
             n_files += 1
-        print(f"[remap] {split}: {n_files}파일, {n_boxes}박스 유지, {n_dropped}박스 제거")
+        print(f"[remap] {split}: {n_files} files, {n_boxes} boxes kept, {n_dropped} boxes removed")
 
-    # data.yaml 의 names 를 RODONG 2-class 로 덮어쓰기
+    # overwrite data.yaml names with RODONG 2-class
     cfg["names"] = RODONG_NAMES
     cfg["nc"]    = len(RODONG_NAMES)
     with open(yml, "w") as f:
         yaml.safe_dump(cfg, f, allow_unicode=True)
-    print(f"[remap] data.yaml 갱신: nc={len(RODONG_NAMES)}, names={RODONG_NAMES}")
+    print(f"[remap] data.yaml updated: nc={len(RODONG_NAMES)}, names={RODONG_NAMES}")
 
 
 def step_train():
-    """CPU 학습."""
+    """CPU training."""
     try:
         from ultralytics import YOLO
     except ImportError:
-        sys.exit("ERROR: pip install ultralytics 먼저 실행하세요.")
+        sys.exit("ERROR: run 'pip install ultralytics' first.")
 
     yml = os.path.join(DATA_DIR, "data.yaml")
     if not os.path.exists(yml):
-        sys.exit(f"ERROR: {yml} 없음. --download 먼저 실행하세요.")
+        sys.exit(f"ERROR: {yml} not found. Run --download first.")
 
-    print("[train] CPU 학습 시작 (시간 오래 걸림)...")
+    print("[train] starting CPU training (takes a long time)...")
     model = YOLO(TRAIN_CFG["model"])
     model.train(
         data     = yml,
@@ -190,48 +190,48 @@ def step_train():
         name     = "rodong_yolov8n",
         exist_ok = True,
     )
-    print(f"[train] 완료. 결과: {RUNS_DIR}/rodong_yolov8n/")
+    print(f"[train] done. results: {RUNS_DIR}/rodong_yolov8n/")
 
 
 def step_export():
-    """best.pt → ONNX export (Pi OpenCV DNN 호환)."""
+    """best.pt -> ONNX export (Pi OpenCV DNN compatible)."""
     try:
         from ultralytics import YOLO
     except ImportError:
-        sys.exit("ERROR: pip install ultralytics 먼저 실행하세요.")
+        sys.exit("ERROR: run 'pip install ultralytics' first.")
 
     best = os.path.join(RUNS_DIR, "rodong_yolov8n", "weights", "best.pt")
     if not os.path.exists(best):
-        sys.exit(f"ERROR: {best} 없음. --train 먼저 실행하세요.")
+        sys.exit(f"ERROR: {best} not found. Run --train first.")
 
-    print(f"[export] {best} → ONNX...")
+    print(f"[export] {best} -> ONNX...")
     model = YOLO(best)
-    # opset 12 = OpenCV DNN 호환성 좋음. simplify 로 그래프 단순화.
+    # opset 12 = good OpenCV DNN compatibility. simplify reduces the graph.
     out = model.export(
         format   = "onnx",
         imgsz    = TRAIN_CFG["imgsz"],
         opset    = 12,
         simplify = True,
-        dynamic  = False,   # Pi OpenCV DNN 은 고정 입력이 안전
+        dynamic  = False,   # fixed input is safe for Pi OpenCV DNN
     )
-    # export 결과를 ONNX_OUT 으로 복사
+    # copy the export result to ONNX_OUT
     if isinstance(out, str) and os.path.exists(out):
         shutil.copy(out, ONNX_OUT)
     else:
         src = best.replace(".pt", ".onnx")
         if os.path.exists(src):
             shutil.copy(src, ONNX_OUT)
-    print(f"[export] 완료: {ONNX_OUT}")
-    print(f"[export] Pi로 복사:")
+    print(f"[export] done: {ONNX_OUT}")
+    print(f"[export] copy to the Pi:")
     print(f"  scp '{ONNX_OUT}' pi@192.168.10.2:~/xycar_ws/src/rodong/models/rodong.onnx")
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--download", action="store_true", help="데이터셋 다운로드+재매핑")
-    ap.add_argument("--train",    action="store_true", help="CPU 학습")
+    ap.add_argument("--download", action="store_true", help="download dataset + remap")
+    ap.add_argument("--train",    action="store_true", help="CPU training")
     ap.add_argument("--export",   action="store_true", help="ONNX export")
-    ap.add_argument("--all",      action="store_true", help="전부 순차 실행")
+    ap.add_argument("--all",      action="store_true", help="run all in sequence")
     args = ap.parse_args()
 
     if args.all:

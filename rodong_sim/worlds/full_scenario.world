@@ -1,21 +1,21 @@
 <?xml version="1.0"?>
-<!-- 풀 시나리오 월드: 장애물 회피 → 앞 ArUco 접근 → 유턴 → 뒤 ArUco 검출.
-     차는 원점에서 +X 를 바라보며 출발.
-       1) obstacle_1/2 회피 (BUG_DRIVE / VFH)
-       2) aruco_front(+X, -X면이 차를 향함) 검출 → MARKER_APPROACH → 접근완료 → UTURN(170°)
-       3) 유턴 후 -X 로 주행하며 aruco_rear(-X, +X면이 차를 향함) 검출 → MARKER_APPROACH
-     마커 모델은 GAZEBO_MODEL_PATH(=/workspace/rodong_sim/models)에서 로드. -->
+<!-- Full-scenario world: obstacle avoidance → front ArUco approach → U-turn → rear ArUco detection.
+     The car starts at the origin facing +X.
+       1) avoid obstacle_1/2 (BUG_DRIVE / VFH)
+       2) detect aruco_front (+X, its -X face toward the car) → MARKER_APPROACH → approach complete → UTURN(170°)
+       3) after the U-turn, drive -X and detect aruco_rear (-X, its +X face toward the car) → MARKER_APPROACH
+     The marker models load from GAZEBO_MODEL_PATH (=/workspace/rodong_sim/models). -->
 <sdf version="1.6">
   <world name="default">
 
     <include><uri>model://ground_plane</uri></include>
     <include><uri>model://sun</uri></include>
 
-    <!-- ── 회피 장애물 (슬라럼: 좌우로 비켜 배치) ───────────────────
-         정중앙(마커 일직선)에 두면 head-on 으로 thrash → 마커를 놓침.
-         좌/우로 0.4m 비켜 배치해 차가 중심선·전방을 유지하며 부드럽게
-         회피하고 마커를 계속 시야에 둔다. -->
-    <!-- 우측(−y): 차가 좌로 비킴 -->
+    <!-- ── Avoidance obstacles (slalom: offset left/right) ───────────────────
+         Placed dead-center (collinear with the marker) → head-on thrash → loses the marker.
+         Offset 0.4m left/right so the car keeps the center line and forward heading,
+         avoids smoothly, and keeps the marker in view. -->
+    <!-- right (−y): the car avoids to the left -->
     <model name="obstacle_1">
       <static>true</static>
       <pose>1.4 -0.40 0.15 0 0 0</pose>
@@ -28,7 +28,7 @@
       </link>
     </model>
 
-    <!-- 좌측(+y): 차가 우로 비켜 중심선 복귀 -->
+    <!-- left (+y): the car avoids to the right and returns to the center line -->
     <model name="obstacle_2">
       <static>true</static>
       <pose>2.1 0.40 0.15 0 0 0</pose>
@@ -41,14 +41,14 @@
       </link>
     </model>
 
-    <!-- ── 앞 마커 (+X, 기본 yaw=0 → -X 면이 차를 향함) ──────────── -->
+    <!-- ── front marker (+X, default yaw=0 → its -X face toward the car) ──────────── -->
     <include>
       <name>aruco_front</name>
       <uri>model://aruco_marker</uri>
       <pose>3.2 0 0.16 0 0 0</pose>
     </include>
 
-    <!-- ── 뒤 마커 (-X, yaw=180° → +X 면이 (유턴 후) 차를 향함) ──── -->
+    <!-- ── rear marker (-X, yaw=180° → its +X face toward the car after the U-turn) ──── -->
     <include>
       <name>aruco_rear</name>
       <uri>model://aruco_marker</uri>

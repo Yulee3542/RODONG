@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<!-- Temporary demo world: 2-obstacle staggered slalom → front ArUco approach → one U-turn. Delete after use.
+     Layout: start(0) → red(1.4,-0.25) → green(2.1,+0.25) → ArUco(4.0,0).
+     Placing the two boxes tightly staggered 0.7m apart lets the car see both at once and
+     thread the center gap in an S-curve (the verified slalom from full_scenario). With 2m
+     spacing the car stays on the side it avoided the first box to, so the opposite second
+     box becomes a head-on collision — hence the tight spacing. After the slalom there is a
+     1.9m straight approach to the marker(4.0) → U-turn (zone x≈3.5, 1.4m from the boxes, no
+     interference). No rear marker → no ping-pong. The car starts at the origin facing +X. -->
+<sdf version="1.6">
+  <world name="default">
+
+    <include><uri>model://ground_plane</uri></include>
+    <include><uri>model://sun</uri></include>
+
+    <!-- First box (red, -0.25): intrudes center-right → avoid left (+y) (staggered slalom 1) -->
+    <model name="obstacle_1">
+      <static>true</static>
+      <pose>1.4 -0.25 0.15 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>0.3 0.3 0.3</size></box></geometry></collision>
+        <visual name="v">
+          <geometry><box><size>0.3 0.3 0.3</size></box></geometry>
+          <material><ambient>0.8 0.2 0.2 1</ambient><diffuse>0.8 0.2 0.2 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Second box (green, +0.25): staggered from the first. 0.7m behind, intrudes left →
+         steer back right (-y) to complete the S-curve. Both boxes are seen at once, so the
+         car threads the gap without a head-on collision. -->
+    <model name="obstacle_2">
+      <static>true</static>
+      <pose>2.1 0.25 0.15 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>0.3 0.3 0.3</size></box></geometry></collision>
+        <visual name="v">
+          <geometry><box><size>0.3 0.3 0.3</size></box></geometry>
+          <material><ambient>0.2 0.6 0.2 1</ambient><diffuse>0.2 0.6 0.2 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Front ArUco marker (its -X face toward the car) → approach then U-turn -->
+    <include>
+      <name>aruco_front</name>
+      <uri>model://aruco_marker</uri>
+      <pose>4.0 0 0.16 0 0 0</pose>
+    </include>
+
+  </world>
+</sdf>

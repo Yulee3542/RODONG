@@ -1,17 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-rodong_control.py — 제어기 (순수, ROS 의존성 없음)
+rodong_control.py — controllers (pure, no ROS dependency)
 ================================================================
-간단한 PID. 마커 접근(bearing→조향), 헤딩 복귀(yaw오차→조향) 등
-폐루프 제어에 사용. 단위테스트 가능.
+Simple PID, used for closed-loop control such as marker approach
+(bearing→steering) and heading recovery (yaw error→steering). Unit-testable.
 """
 
 
 class PID:
-    """표준 PID. 출력/적분 클램프 지원.
+    """Standard PID with output/integral clamping.
 
-    출력은 부호 중립(out = kp*e + ki*∫e + kd*de/dt)이며,
-    조향 부호 규약(예: 헤딩 복귀의 err>0 → 음의 조향)은 호출부에서 처리한다.
+    The output is sign-neutral (out = kp*e + ki*∫e + kd*de/dt); the steering sign
+    convention (e.g. err>0 → negative steering for heading recovery) is handled by
+    the caller.
     """
 
     def __init__(self, kp, ki=0.0, kd=0.0, out_limit=None, i_limit=None):

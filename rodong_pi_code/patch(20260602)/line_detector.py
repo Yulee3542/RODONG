@@ -1,31 +1,32 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-line_detector.py — 바닥 검은 경계선 검출 (RODONG13)
+line_detector.py — floor black-boundary detection (RODONG13)
 ================================================================
-역할: USB 카메라로 바닥의 검은 경계선을 검출하여, 차가 경계 밖으로
-      나가지 않도록 /rodong/boundary 로 좌/중/우/근접 검은픽셀 비율을 발행.
-      vfh_planner 가 이를 가상 장애물로 받아 경계 안쪽으로 조향한다.
+Role: detect the black boundary line on the floor with the USB camera and publish
+      left/center/right/near black-pixel ratios to /rodong/boundary so the car does
+      not drive outside the boundary. vfh_planner treats this as a virtual obstacle
+      and steers back inside the boundary.
 
-구독:
+Subscribes:
   /usb_cam/image_raw   (sensor_msgs/Image)
 
-발행:
+Publishes:
   /rodong/boundary     (std_msgs/Float32MultiArray)
       data = [left, center, right, near]
-        left/center/right : ROI(바닥 영역) 좌/중/우 1/3 구역 검은픽셀 비율(0~1)
-        near              : ROI 최하단(차에 가장 가까운) 띠의 검은픽셀 비율(0~1)
-  /rodong/boundary_debug (sensor_msgs/Image, ~debug:=true 일 때만)
-      ROI/마스크 시각화 — rqt_image_view 로 임계값 튜닝용.
+        left/center/right : black-pixel ratio (0~1) of the left/center/right thirds of the ROI (floor area)
+        near              : black-pixel ratio (0~1) of the bottom strip of the ROI (closest to the car)
+  /rodong/boundary_debug (sensor_msgs/Image, only when ~debug:=true)
+      ROI/mask visualization — for tuning thresholds with rqt_image_view.
 
-튜닝 파라미터 (rosparam, launch 에서 지정):
-  ~black_v_max  (int,  60)    HSV V 가 이 값 이하 → 검정으로 간주 (밝으면↑/그림자 많으면↓)
-  ~black_s_max  (int,  255)   HSV S 상한 (기본 무시). 짙은 색 바닥 배제 시 낮춤.
-  ~roi_top      (float,0.55)  ROI 시작 높이비 (0=상단,1=하단). 바닥만 보도록 조정.
-  ~near_top     (float,0.85)  near 띠 시작 높이비 (차에 가장 가까운 영역)
-  ~min_ratio    (float,0.04)  발행 시 노이즈 컷 (이하 0 처리)
-  ~max_hz       (float,15.0)  처리 주기 상한 (Pi CPU 보호)
-  ~debug        (bool, false) 디버그 이미지 발행
+Tuning parameters (rosparam, set in launch):
+  ~black_v_max  (int,  60)    HSV V at/below this → treated as black (raise if bright / lower if shadowy)
+  ~black_s_max  (int,  255)   HSV S upper bound (ignored by default). Lower it to exclude dark-colored floors.
+  ~roi_top      (float,0.55)  ROI start height ratio (0=top, 1=bottom). Adjust to view only the floor.
+  ~near_top     (float,0.85)  near-strip start height ratio (area closest to the car)
+  ~min_ratio    (float,0.04)  noise cut on publish (at/below → treated as 0)
+  ~max_hz       (float,15.0)  processing rate cap (protects Pi CPU)
+  ~debug        (bool, false) publish debug image
 """
 
 import rospy
@@ -59,19 +60,19 @@ class LineDetector:
 
         rospy.Subscriber('/usb_cam/image_raw', Image, self.cb_image,
                          queue_size=1, buff_size=2**24)
-        rospy.loginfo('[Line] 바닥 경계선 검출 시작 (V<=%d, roi_top=%.2f, debug=%s)',
+        rospy.loginfo('[Line] floor boundary detection started (V<=%d, roi_top=%.2f, debug=%s)',
                       self.black_v_max, self.roi_top, self.debug)
 
     def cb_image(self, msg):
         now = rospy.Time.now()
         if (now - self._last_t).to_sec() < self._min_dt:
-            return                              # 처리 주기 제한 (CPU 보호)
+            return                              # rate limit (protect CPU)
         self._last_t = now
 
         try:
             frame = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
         except Exception as e:
-            rospy.logwarn_throttle(5, '[Line] cv_bridge 오류: %s', e)
+            rospy.logwarn_throttle(5, '[Line] cv_bridge error: %s', e)
             return
 
         h, w = frame.shape[:2]
@@ -81,14 +82,14 @@ class LineDetector:
         if rh < 2 or rw < 3:
             return
 
-        # ── 검정 마스크 (HSV: V 낮음 = 어두움) ──────────────────────────
+        # ── black mask (HSV: low V = dark) ──────────────────────────────
         hsv   = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
         lower = np.array([0, 0, 0],                       dtype=np.uint8)
         upper = np.array([179, self.black_s_max, self.black_v_max], dtype=np.uint8)
         mask  = cv2.inRange(hsv, lower, upper)
         mask  = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self._kernel)
 
-        # ── 좌/중/우 1/3 + near(하단 띠) 검은픽셀 비율 ──────────────────
+        # ── left/center/right thirds + near (bottom strip) black-pixel ratio ────
         third = rw // 3
 
         def ratio(sub):
@@ -110,7 +111,7 @@ class LineDetector:
         rospy.loginfo_throttle(2.0,
             '[Line] L=%.2f C=%.2f R=%.2f near=%.2f', left, center, right, near)
 
-        # ── 디버그 시각화 ──────────────────────────────────────────────
+        # ── debug visualization ────────────────────────────────────────
         if self.dbg_pub is not None:
             vis = roi.copy()
             vis[mask > 0] = (0, 0, 255)

@@ -14,8 +14,8 @@ def _sonar(**idx_val):
 
 def test_front_min_ignores_nonpositive():
     s = _sonar(**{'1': 50, '2': -1, '3': 30})
-    assert front_min(s) == 30          # -1 무시, min(50,30)
-    assert front_min([0] * 8) == 999   # 전부 무효 → 999
+    assert front_min(s) == 30          # ignore -1, min(50,30)
+    assert front_min([0] * 8) == 999   # all invalid → 999
 
 
 def test_rear_min():
@@ -24,18 +24,18 @@ def test_rear_min():
 
 
 def test_build_histogram_marks_near_front_blocked():
-    # 정면 빔(idx3, 0°, 섹터3)이 10cm → weight=(40-10)/40=0.75
+    # front beam (idx3, 0°, sector3) at 10cm → weight=(40-10)/40=0.75
     s = _sonar(**{'3': 10})
     hist = build_histogram(s)
-    assert hist[3] > cfg.OPEN_THRESH                  # 섹터3 막힘
-    assert abs(hist[2] - 0.375) < 1e-6                # 인접 번짐 0.75*0.5
+    assert hist[3] > cfg.OPEN_THRESH                  # sector3 blocked
+    assert abs(hist[2] - 0.375) < 1e-6                # adjacent bleed 0.75*0.5
     assert abs(hist[4] - 0.375) < 1e-6
-    assert hist[0] == 0.0                             # 측/후방 빔 영향 없음
+    assert hist[0] == 0.0                             # side/rear beams have no effect
 
 
 def test_build_histogram_ignores_far_and_rear():
-    # 모두 멀거나(>=40) 후방 빔 → 전부 0
-    s = _sonar(**{'6': 5, '7': 5, '5': 5})            # 후방만 가까움
+    # all far (>=40) or rear beams → all 0
+    s = _sonar(**{'6': 5, '7': 5, '5': 5})            # only rear is close
     hist = build_histogram(s)
     assert hist == [0.0] * cfg.N_SECTORS
 
@@ -47,7 +47,7 @@ def test_select_sector_picks_goal_when_open():
 
 
 def test_select_sector_avoids_blocked_front():
-    # 정면(섹터3) 막힘 → 인접 통행 섹터(2 또는 4)로
+    # front (sector3) blocked → to an adjacent passable sector (2 or 4)
     s = _sonar(**{'3': 10})
     hist = build_histogram(s)
     sec = select_sector(hist, goal_sector=3, prev_steer=0)

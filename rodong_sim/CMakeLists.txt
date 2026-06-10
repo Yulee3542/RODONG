@@ -13,5 +13,6 @@ catkin_package()
 catkin_install_python(PROGRAMS
   scripts/sim_bridge.py
   scripts/run_app.py
+  scripts/sim_vision_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

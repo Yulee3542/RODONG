@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<!-- Temporary demo launch: 2-obstacle staggered avoid → front ArUco approach → U-turn → return. Delete after use.
+
+     [SIM/REAL distinction — archiving note]
+       This launch is sim-only. The driving nodes (vfh_planner/rodong_main/aruco_detector)
+       run the real Pi code (the patch folder in app_dir) as-is, and only the parameters below
+       adapt it to the sim environment. Real hardware (rodong.launch) does not pass these
+       values, so each parameter's default (= real behavior) applies:
+         • sim_bridge.*            : Gazebo bicycle-model conversion (node does not exist on the real car).
+         • return_yaw_lock=true    : hold return at a fixed global yaw after a U-turn (real default False).
+         • spawn -y -0.20          : start slightly lowered to make box1's left avoidance clear (sim layout).
+       vision_steer_enable uses the same verified config as full_scenario (also usable on the real car). -->
+<launch>
+  <arg name="app_dir" default="/workspace/rodong_pi_code/patch(20260602)"/>
+  <arg name="gui"     default="true"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find rodong_sim)/worlds/_demo_two_box.world"/>
+    <arg name="gui"        value="$(arg gui)"/>
+    <arg name="paused"     value="false"/>
+    <arg name="use_sim_time" value="true"/>
+  </include>
+
+  <param name="robot_description" textfile="$(find rodong_sim)/urdf/rodong_box.urdf"/>
+  <node name="spawn_rodong" pkg="gazebo_ros" type="spawn_model" output="screen"
+        args="-param robot_description -urdf -model rodong -x 0 -y -0.20 -z 0.10"/>
+
+  <node name="sim_bridge" pkg="rodong_sim" type="sim_bridge.py" output="screen">
+    <param name="speed_to_ms"   value="0.02"/>
+    <param name="wheelbase"     value="0.30"/>
+    <param name="max_steer_deg" value="35.0"/>
+    <param name="max_cm"        value="300"/>
+  </node>
+
+  <!-- Vision avoidance uses the same verified config as full_scenario (default parameters).
+       The tight staggered slalom (boxes 0.7m apart) lets the car see both boxes at once and
+       thread the center gap → a clean S-curve without extra steering tuning. -->
+  <node name="vfh_planner"    pkg="rodong_sim" type="run_app.py" output="screen"
+        args="$(arg app_dir) vfh_planner">
+    <param name="vision_steer_enable" value="true"/>
+  </node>
+  <!-- [SIM-ONLY] hold a fixed global yaw (start+180°) on the return after a U-turn (prevents
+       heading drift). Real hardware does not set this → default False → existing free return. -->
+  <node name="rodong_main"    pkg="rodong_sim" type="run_app.py" output="screen"
+        args="$(arg app_dir) rodong_main">
+    <param name="return_yaw_lock" value="true"/>
+  </node>
+  <node name="aruco_detector" pkg="rodong_sim" type="run_app.py" output="screen"
+        args="$(arg app_dir) aruco_detector"/>
+  <node name="sim_vision_node" pkg="rodong_sim" type="sim_vision_node.py" output="screen"/>
+</launch>

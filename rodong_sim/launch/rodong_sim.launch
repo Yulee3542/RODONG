@@ -1,18 +1,18 @@
 <?xml version="1.0"?>
 <!--
-  rodong_sim.launch — 단순 박스 모델 Gazebo + RODONG FSM/회피 노드.
-  실행:
+  rodong_sim.launch — simple box-model Gazebo + RODONG FSM/avoidance nodes.
+  Run:
     roslaunch rodong_sim rodong_sim.launch
-  주행 시작(IDLE→BUG_DRIVE):
+  Start driving (IDLE→BUG_DRIVE):
     rostopic pub -1 /rodong/cmd std_msgs/String "data: 'INIT'"
 -->
 <launch>
 
-  <!-- 애플리케이션 코드(patch) 위치. 다른 경로면 app_dir:=... 로 override -->
+  <!-- Application code (patch) location. Override with app_dir:=... for a different path -->
   <arg name="app_dir" default="/workspace/rodong_pi_code/patch(20260602)"/>
   <arg name="gui"     default="true"/>
-  <arg name="world"   default="obstacles.world"/>   <!-- 시나리오별 월드 교체 -->
-  <arg name="spawn_x" default="0"/>                 <!-- 스폰 X (근접 벽 테스트용) -->
+  <arg name="world"   default="obstacles.world"/>   <!-- swap world per scenario -->
+  <arg name="spawn_x" default="0"/>                 <!-- spawn X (for the close-wall test) -->
 
   <!-- ── Gazebo ───────────────────────────────────────────────────── -->
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
@@ -22,12 +22,12 @@
     <arg name="use_sim_time" value="true"/>
   </include>
 
-  <!-- ── 로봇 스폰 ────────────────────────────────────────────────── -->
+  <!-- ── robot spawn ──────────────────────────────────────────────── -->
   <param name="robot_description" textfile="$(find rodong_sim)/urdf/rodong_box.urdf"/>
   <node name="spawn_rodong" pkg="gazebo_ros" type="spawn_model" output="screen"
         args="-param robot_description -urdf -model rodong -x $(arg spawn_x) -y 0 -z 0.10"/>
 
-  <!-- ── 브리지 (Gazebo ↔ Xycar 토픽) ────────────────────────────── -->
+  <!-- ── bridge (Gazebo ↔ Xycar topics) ──────────────────────────── -->
   <node name="sim_bridge" pkg="rodong_sim" type="sim_bridge.py" output="screen">
     <param name="speed_to_ms"   value="0.03"/>
     <param name="wheelbase"     value="0.30"/>
@@ -35,13 +35,13 @@
     <param name="max_cm"        value="300"/>
   </node>
 
-  <!-- ── 애플리케이션 노드 (patch 원본을 단일 소스로 실행) ────────── -->
+  <!-- ── application nodes (run the patch originals as a single source) ────── -->
   <node name="vfh_planner" pkg="rodong_sim" type="run_app.py" output="screen"
         args="$(arg app_dir) vfh_planner"/>
   <node name="rodong_main" pkg="rodong_sim" type="run_app.py" output="screen"
         args="$(arg app_dir) rodong_main"/>
 
-  <!-- aruco_detector / yolo_node 는 마커·카메라가 없어 생략.
-       마커가 안 보이므로 rodong_main 은 BUG_DRIVE 회피 상태를 유지한다. -->
+  <!-- aruco_detector / yolo_node omitted (no marker/camera). With no marker visible,
+       rodong_main stays in the BUG_DRIVE avoidance state. -->
 
 </launch>

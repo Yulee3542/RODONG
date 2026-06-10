@@ -1,11 +1,11 @@
 <?xml version="1.0"?>
 <!--
-  rodong_box.urdf — RODONG FSM/회피 로직 검증용 단순 박스 차량.
-  실제 Xycar 모델이 아니라 토픽 인터페이스만 동일하게 맞춘 최소 모델이다.
-    - libgazebo_ros_planar_move : /cmd_vel(Twist) 구독 → 차체를 유니사이클처럼 이동, /odom + tf 발행
-    - 360° ray 라이다       : /scan(LaserScan) 발행 → sim_bridge 가 8빔으로 샘플링해 /xycar_ultrasonic 생성
-    - imu 센서              : /imu/data(sensor_msgs/Imu) 발행 → rodong_main 의 헤딩(yaw) 입력
-  base 박스: 0.30(L) x 0.20(W) x 0.10(H). 라이다는 차체 위(z+0.08)라 자기 차체엔 안 맞는다.
+  rodong_box.urdf — simple box vehicle for validating RODONG FSM/avoidance logic.
+  Not an actual Xycar model, but a minimal model matching only the topic interface.
+    - libgazebo_ros_planar_move : subscribes /cmd_vel(Twist) -> moves the body like a unicycle, publishes /odom + tf
+    - 360° ray lidar        : publishes /scan(LaserScan) -> sim_bridge samples 8 beams to produce /xycar_ultrasonic
+    - imu sensor            : publishes /imu/data(sensor_msgs/Imu) -> heading (yaw) input for rodong_main
+  base box: 0.30(L) x 0.20(W) x 0.10(H). The lidar sits above the body (z+0.08), so it does not hit the body itself.
 -->
 <robot name="rodong_box">
 
@@ -37,11 +37,11 @@
   <joint name="laser_joint" type="fixed">
     <parent link="base_link"/>
     <child link="laser_link"/>
-    <!-- 차체 앞쪽 위. 차체 윗면(z=+0.05)보다 높게 둬서 빔이 차체에 안 막히게. -->
+    <!-- Front-top of the body. Placed above the body top (z=+0.05) so beams aren't blocked by the body. -->
     <origin xyz="0.10 0 0.08" rpy="0 0 0"/>
   </joint>
 
-  <!-- 전방 카메라 (ArUco/YOLO 입력) -->
+  <!-- Front camera (ArUco/YOLO input) -->
   <link name="camera_link">
     <inertial>
       <mass value="0.01"/>
@@ -54,7 +54,7 @@
   <joint name="camera_joint" type="fixed">
     <parent link="base_link"/>
     <child link="camera_link"/>
-    <!-- 차체 앞면, 라이다보다 약간 낮게. 광축 +X(전방). -->
+    <!-- Front face of the body, slightly below the lidar. Optical axis +X (forward). -->
     <origin xyz="0.15 0 0.06" rpy="0 0 0"/>
   </joint>
 
@@ -62,7 +62,7 @@
   <gazebo reference="laser_link"><material>Gazebo/Red</material></gazebo>
   <gazebo reference="camera_link"><material>Gazebo/Green</material></gazebo>
 
-  <!-- ── 구동: planar move (kinematic unicycle) ───────────────────── -->
+  <!-- ── Drive: planar move (kinematic unicycle) ──────────────────── -->
   <gazebo>
     <plugin name="planar_move" filename="libgazebo_ros_planar_move.so">
       <commandTopic>cmd_vel</commandTopic>
@@ -73,7 +73,7 @@
     </plugin>
   </gazebo>
 
-  <!-- ── 360° 라이다 (CPU ray, GPU 불필요) ────────────────────────── -->
+  <!-- ── 360° lidar (CPU ray, no GPU needed) ──────────────────────── -->
   <gazebo reference="laser_link">
     <sensor type="ray" name="laser">
       <pose>0 0 0 0 0 0</pose>
@@ -101,9 +101,9 @@
     </sensor>
   </gazebo>
 
-  <!-- ── 카메라 (Gazebo Classic, libgazebo_ros_camera) ───────────────
-       /usb_cam/image_raw 발행 → aruco_detector / yolo_node 가 구독.
-       헤드리스에선 xvfb + 소프트웨어 GL 로 오프스크린 렌더된다. -->
+  <!-- ── Camera (Gazebo Classic, libgazebo_ros_camera) ───────────────
+       Publishes /usb_cam/image_raw -> aruco_detector / yolo_node subscribe.
+       On headless, rendered offscreen via xvfb + software GL. -->
   <gazebo reference="camera_link">
     <sensor type="camera" name="usb_cam">
       <always_on>true</always_on>

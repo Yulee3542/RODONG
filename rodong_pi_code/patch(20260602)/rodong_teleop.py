@@ -19,25 +19,25 @@ BANNER = """
 ============================================================
   RODONG Teleop  (RODONG13)
 ------------------------------------------------------------
-  i        : INIT  — 자율주행 시작
-  s        : STOP  — 전체 정지
-  m        : MANUAL — 좌표 입력 모드 진입
-  u        : UTURN  — 유턴 테스트
-  q / Ctrl+C : 종료
+  i        : INIT  — start autonomous driving
+  s        : STOP  — full stop
+  m        : MANUAL — enter coordinate-input mode
+  u        : UTURN  — U-turn test
+  q / Ctrl+C : quit
 ============================================================
 """
 
 MANUAL_HELP = """
-[MANUAL MODE]  목표 좌표를 입력하세요 (현재 위치 기준 상대좌표, cm 단위)
-  예)  100 0     →  정면 100cm
-       0 50      →  왼쪽 50cm
-      -80 0      →  후방 80cm
-  'b' + Enter   →  MANUAL 모드 취소 (자율주행 복귀)
+[MANUAL MODE]  Enter a goal coordinate (relative to current position, in cm)
+  e.g.)  100 0     →  100cm ahead
+         0 50      →  50cm to the left
+        -80 0      →  80cm behind
+  'b' + Enter   →  cancel MANUAL mode (return to autonomous)
 """
 
 
 def get_key():
-    """터미널에서 단일 키 읽기 (non-blocking)"""
+    """Read a single key from the terminal (non-blocking)"""
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     try:
@@ -49,10 +49,10 @@ def get_key():
 
 
 def get_line():
-    """MANUAL 모드: 터미널을 일반 모드로 복원 후 한 줄 읽기"""
+    """MANUAL mode: restore the terminal to normal mode, then read one line"""
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
-    termios.tcsetattr(fd, termios.TCSADRAIN, old)  # 이미 normal이지만 보험
+    termios.tcsetattr(fd, termios.TCSADRAIN, old)  # already normal, but just in case
     return sys.stdin.readline().strip()
 
 
@@ -88,7 +88,7 @@ class TeleopNode:
                 break
 
             if line.lower() == 'b':
-                print('[MANUAL] 취소 → 자율주행 복귀')
+                print('[MANUAL] cancel → return to autonomous')
                 self.manual_mode = False
                 self.send_cmd('INIT')
                 break
@@ -99,42 +99,42 @@ class TeleopNode:
                     x = float(parts[0])
                     y = float(parts[1])
                     self.send_goal(x, y)
-                    print('[MANUAL] 목표 전송: x={:.1f}  y={:.1f} cm'.format(x, y))
-                    print("  다음 좌표 입력 (또는 'b' 로 종료):")
+                    print('[MANUAL] goal sent: x={:.1f}  y={:.1f} cm'.format(x, y))
+                    print("  enter next coordinate (or 'b' to exit):")
                 except ValueError:
-                    print('[MANUAL] 숫자를 입력하세요. 예) 100 0')
+                    print('[MANUAL] enter numbers. e.g.) 100 0')
             else:
-                print("[MANUAL] 형식 오류. 예) 100 0  /  'b' 로 종료")
+                print("[MANUAL] format error. e.g.) 100 0  /  'b' to exit")
 
     def run(self):
         print(BANNER)
-        print('노드 준비 완료. 키를 누르세요...')
+        print('Node ready. Press a key...')
         while not rospy.is_shutdown():
             key = get_key()
 
             if key in ('\x03', 'q'):          # Ctrl+C or q
-                print('\n[Teleop] 종료합니다.')
+                print('\n[Teleop] quitting.')
                 self.send_cmd('STOP')
                 break
 
             elif key == 'i':
                 self.send_cmd('INIT')
-                print('[Teleop] 자율주행 시작')
+                print('[Teleop] autonomous driving started')
 
             elif key == 's':
                 self.send_cmd('STOP')
-                print('[Teleop] 정지')
+                print('[Teleop] stop')
 
             elif key == 'm':
-                print('[Teleop] MANUAL 모드 진입')
+                print('[Teleop] entering MANUAL mode')
                 self.enter_manual()
 
             elif key == 'u':
                 self.send_cmd('UTURN')
-                print('[Teleop] UTURN 시작')
+                print('[Teleop] UTURN started')
 
             else:
-                pass  # 기타 키 무시
+                pass  # ignore other keys
 
 
 if __name__ == '__main__':

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-rodong_geometry.py — 순수 기하/각도 헬퍼 (ROS 의존성 없음)
+rodong_geometry.py — pure geometry/angle helpers (no ROS dependency)
 ================================================================
-rodong_main / vfh_planner 에 흩어져 있던 각도 계산을 추출하여 단위테스트 가능하게.
-동작은 기존과 동일하다.
+Angle math that used to be scattered across rodong_main / vfh_planner, extracted
+so it can be unit-tested. Behavior is identical to before.
 """
 
 
@@ -12,19 +12,19 @@ def clip(v, lo, hi):
 
 
 def yaw_diff(start, current):
-    """두 yaw[deg] 사이의 절대 차이 (0~180)."""
+    """Absolute difference between two yaw[deg] values (0..180)."""
     d = abs(current - start) % 360
     return d if d <= 180 else 360 - d
 
 
 def yaw_signed_diff(target, current):
-    """target - current 를 (-180, 180]° 로 정규화.
-    부호: + → yaw 증가 필요(좌회전), - → yaw 감소 필요(우회전)."""
+    """Normalize (target - current) to (-180, 180] degrees.
+    Sign: + → yaw must increase (turn left), - → yaw must decrease (turn right)."""
     return (target - current + 180) % 360 - 180
 
 
 def angle_to_sector(deg, n_sectors=7, sector_deg=30.0):
-    """-90~+90 deg → 0~(n-1) 섹터. 범위(±105) 밖이면 None."""
+    """-90..+90 deg → sector 0..(n-1). Returns None if outside the range (±105)."""
     if deg < -105 or deg > 105:
         return None
     s = int(round((deg + 90) / sector_deg))
