@@ -11,7 +11,29 @@
       "Bash(git init *)",
       "Bash(git add *)",
       "Bash(xargs -0 du -h)",
-      "Bash(awk '$1 ~ /[0-9.]+[MG]/ && \\($1+0>50 || $1 ~ /G/\\){print}')"
+      "Bash(awk '$1 ~ /[0-9.]+[MG]/ && \\($1+0>50 || $1 ~ /G/\\){print}')",
+      "Bash(git commit -q -m ' *)",
+      "Bash(git branch *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(ping -c 2 -W 2 192.168.10.2)",
+      "Bash(ip addr *)",
+      "Bash(timeout 15 sshpass -p 'xytron' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 pi@192.168.10.2 'echo CONNECTED; hostname; uname -a')",
+      "Bash(export DISPLAY=:0)",
+      "Bash(export XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.XFRRQ3)",
+      "Bash(xhost +SI:localuser:root)",
+      "Bash(scripts/sim_run.sh gui *)",
+      "Bash(cd *)",
+      "Bash(docker stop *)",
+      "Bash(docker rm *)",
+      "Bash(scripts/sim_run.sh full *)",
+      "Bash(scripts/sim_cmd.sh INIT)",
+      "Bash(docker exec *)",
+      "Bash(awk '{print $5, $9}')",
+      "Bash(python3 -m py_compile rodong_main.py rodong_config.py rodong_geometry.py rodong_sonar.py rodong_control.py)",
+      "Bash(PYTHONPATH=. /home/yulee23/RODONG/rodong_train_venv/bin/python -m pytest test/ -q)",
+      "Bash(python3 -m py_compile rodong_sim/scripts/run_app.py rodong_sim/scripts/sim_bridge.py rodong_sim/scripts/sim_vision_node.py rodong_sim/_record_drive.py)",
+      "Bash(grep -rlP '[\\\\x{AC00}-\\\\x{D7A3}]' rodong_train/*.py rodong_train/*.sh rodong_train/*.launch scripts/*.sh docker/compose.yaml ADR036_Hardware_Manual.md)"
     ]
   }
 }
